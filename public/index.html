@@ -3,38 +3,82 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Webhook-Ear</title>
+  <meta name="theme-color" content="#0b0d12">
+  <title>Webhook-Ear · Live Webhook Empfänger</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
 </head>
 <body>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
   <header class="topbar">
     <div class="wrap">
-      <h1>Webhook-Ear</h1>
-      <span id="status" class="status">Verbinde …</span>
+      <div class="brand">
+        <span class="logo">📡</span>
+        <div>
+          <h1>Webhook-Ear</h1>
+          <p class="tagline">Empfängt Webhooks · zeigt sie live an</p>
+        </div>
+      </div>
+      <div class="top-right">
+        <span id="status" class="status">Verbinde …</span>
+        <span class="pill">Free · 24/7</span>
+      </div>
     </div>
   </header>
 
   <main class="wrap">
-    <section class="card">
-      <h2>Deine Webhook-URL</h2>
-      <p class="hint">Diese URL trägst du auf der externen Website ein. Jede POST-Anfrage daran wird hier live angezeigt.</p>
-      <div class="row">
-        <input id="url" type="text" readonly>
-        <button id="copy" class="btn">Kopieren</button>
+    <section class="hero">
+      <div class="hero-text">
+        <span class="eyebrow">Deine Webhook-URL</span>
+        <p class="hint">Trage diese URL in die externe Website ein. Jede POST-Anfrage erscheint hier sofort und live.</p>
+      </div>
+      <div class="row url-row">
+        <input id="url" type="text" readonly spellcheck="false">
+        <button id="copy" class="btn primary">Kopieren</button>
         <button id="test" class="btn ghost">Test senden</button>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-num" id="count">0</span>
+          <span class="stat-label">Empfangen</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="lastTime">–</span>
+          <span class="stat-label">Letztes Ereignis</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="connState">–</span>
+          <span class="stat-label">Verbindung</span>
+        </div>
       </div>
     </section>
 
-    <section class="card">
+    <section class="card feed">
       <div class="card-head">
-        <h2>Empfangene Nachrichten</h2>
-        <span id="count" class="count">0</span>
+        <div class="card-title">
+          <span class="live-dot" aria-hidden="true"></span>
+          <h2>Live-Feed</h2>
+        </div>
         <button id="clear" class="btn ghost small">Leeren</button>
       </div>
+
       <div id="events" class="events"></div>
-      <div id="empty" class="empty">Noch keine Webhooks empfangen.</div>
+      <div id="empty" class="empty">
+        <span class="empty-icon">🎧</span>
+        <p>Noch keine Webhooks empfangen.</p>
+        <p class="empty-sub">Klicke auf „Test senden", um die erste Nachricht zu erzeugen.</p>
+      </div>
     </section>
   </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <span>Webhook-Ear</span>
+      <span class="dim">GET/POST <code>/hook</code> · Events über <code>/events</code></span>
+    </div>
+  </footer>
 
   <script src="/app.js"></script>
 </body>

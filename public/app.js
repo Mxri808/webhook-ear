@@ -6,6 +6,8 @@ const eventsEl = document.getElementById('events');
 const emptyEl = document.getElementById('empty');
 const countEl = document.getElementById('count');
 const statusEl = document.getElementById('status');
+const lastTimeEl = document.getElementById('lastTime');
+const connStateEl = document.getElementById('connState');
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
 urlInput.value = hookUrl;
@@ -13,7 +15,19 @@ urlInput.value = hookUrl;
 let count = 0;
 
 function setStatus(state) {
-  statusEl.textContent = state === 'online' ? 'Live verbunden' : state === 'offline' ? 'Verbindung getrennt' : 'Verbinde …';
+  if (state === 'online') {
+    statusEl.textContent = 'Live verbunden';
+    connStateEl.textContent = 'Online';
+    connStateEl.style.color = 'var(--green)';
+  } else if (state === 'offline') {
+    statusEl.textContent = 'Verbindung getrennt';
+    connStateEl.textContent = 'Offline';
+    connStateEl.style.color = 'var(--red)';
+  } else {
+    statusEl.textContent = 'Verbinde …';
+    connStateEl.textContent = '…';
+    connStateEl.style.color = '';
+  }
   statusEl.className = 'status ' + state;
 }
 
@@ -73,6 +87,7 @@ function render(entry) {
 
   count += 1;
   countEl.textContent = String(count);
+  lastTimeEl.textContent = new Date(entry.time).toLocaleTimeString('de-DE');
   emptyEl.classList.add('hidden');
 }
 
