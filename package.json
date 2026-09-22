@@ -1,0 +1,14 @@
+{
+  "name": "webhook-ear",
+  "version": "1.0.0",
+  "description": "Empfaengt Webhooks an einer eigenen URL und zeigt sie live im Browser an.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

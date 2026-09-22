@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Webhook-Ear</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <h1>Webhook-Ear</h1>
+      <span id="status" class="status">Verbinde …</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <h2>Deine Webhook-URL</h2>
+      <p class="hint">Diese URL trägst du auf der externen Website ein. Jede POST-Anfrage daran wird hier live angezeigt.</p>
+      <div class="row">
+        <input id="url" type="text" readonly>
+        <button id="copy" class="btn">Kopieren</button>
+        <button id="test" class="btn ghost">Test senden</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Empfangene Nachrichten</h2>
+        <span id="count" class="count">0</span>
+        <button id="clear" class="btn ghost small">Leeren</button>
+      </div>
+      <div id="events" class="events"></div>
+      <div id="empty" class="empty">Noch keine Webhooks empfangen.</div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
