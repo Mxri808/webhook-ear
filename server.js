@@ -109,6 +109,79 @@ function send404(res) {
   res.end('Nicht gefunden.');
 }
 
+/* ---------- Discord-Brücke ---------- */
+
+function startDiscordBridge() {
+  const token = process.env.DISCORD_TOKEN;
+  if (!token) {
+    console.log('DISCORD_TOKEN nicht gesetzt – Discord-Brücke deaktiviert.');
+    return;
+  }
+
+  import('discord.js').then(({ Client, GatewayIntentBits }) => {
+    const channelId = process.env.DISCORD_CHANNEL_ID || null;
+    const client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+      ],
+    });
+
+    client.once('ready', () => {
+      console.log('Discord-Brücke online als', client.user.tag,
+        channelId ? '(Kanal-Filter: ' + channelId + ')' : '(alle Kanäle)');
+    });
+
+    client.on('messageCreate', (msg) => {
+      try {
+        if (channelId && msg.channel.id !== channelId) return;
+        if (!msg.webhookId) return; // nur Webhook-Nachrichten (vom Pokémon-Go-Bot)
+
+        const embeds = msg.embeds.map((e) => ({
+          title: e.title,
+          description: e.description,
+          color: e.color,
+          url: e.url,
+          author: e.author ? e.author.name : undefined,
+          fields: (e.fields || []).map((f) => ({
+            name: f.name, value: f.value, inline: f.inline,
+          })),
+          footer: e.footer ? e.footer.text : undefined,
+          timestamp: e.timestamp,
+          image: e.image ? e.image.url : undefined,
+          thumbnail: e.thumbnail ? e.thumbnail.url : undefined,
+        }));
+
+        const body = {
+          source: 'discord',
+          channel: msg.channel.name || msg.channel.id,
+          author: msg.webhookName || 'webhook',
+          content: msg.content || undefined,
+          embeds,
+          discord_time: msg.createdAt.toISOString(),
+        };
+
+        addMessage({
+          method: 'DISCORD',
+          url: '/discord/' + (msg.channel.name || msg.channel.id),
+          headers: { 'content-type': 'application/json' },
+          type: 'json',
+          body,
+        });
+      } catch (err) {
+        console.error('Discord-Brücke Fehler:', err);
+      }
+    });
+
+    client.login(token).catch((err) => {
+      console.error('Discord-Login fehlgeschlagen:', err.message);
+    });
+  }).catch((err) => {
+    console.error('discord.js konnte nicht geladen werden:', err.message);
+  });
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const p = url.pathname;
@@ -170,4 +243,5 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Webhook-Ear laeuft auf http://localhost:${PORT}`);
   console.log(`Webhook-URL: http://localhost:${PORT}/hook`);
+  startDiscordBridge();
 });

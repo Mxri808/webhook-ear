@@ -183,10 +183,91 @@ function prettyPokemon(o) {
   };
 }
 
+/* ---------- Discord-Embed-Erkennung ---------- */
+
+function looksLikeDiscord(o) {
+  if (!o || typeof o !== 'object') return false;
+  return o.source === 'discord' || Array.isArray(o.embeds);
+}
+
+function ivClassFor(name, value) {
+  if (!/iv/i.test(name)) return '';
+  const m = String(value).replace(',', '.').match(/(\d+(?:\.\d+)?)\s*%?/);
+  if (!m) return '';
+  const n = Number(m[1]);
+  const pct = n <= 1.5 ? n * 100 : n;
+  if (pct >= 100) return 'perfect';
+  if (pct >= 95) return 'iv-great';
+  if (pct >= 80) return 'iv-good';
+  return '';
+}
+
+function prettyDiscord(o) {
+  const parts = [];
+
+  if (o.author || o.content || o.channel) {
+    const metaBits = [];
+    if (o.author) metaBits.push('🤖 ' + escapeHtml(o.author));
+    if (o.channel) metaBits.push('#' + escapeHtml(o.channel));
+    if (metaBits.length) {
+      parts.push('<div class="poke-sub" style="margin-bottom:8px">' + metaBits.join(' · ') + '</div>');
+    }
+  }
+
+  if (o.content) {
+    parts.push('<div class="poke-title"><span class="poke-name">' + escapeHtml(o.content) + '</span></div>');
+  }
+
+  const embeds = o.embeds || [];
+  let embedColor = null;
+
+  for (const e of embeds) {
+    if (e.color != null && embedColor == null) embedColor = e.color;
+
+    if (e.title) {
+      const t = e.url
+        ? '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><span class="poke-name">' + escapeHtml(e.title) + '</span></a>'
+        : '<span class="poke-name">' + escapeHtml(e.title) + '</span>';
+      parts.push('<div class="poke-title">' + t + '</div>');
+    }
+
+    if (e.description) {
+      parts.push('<div class="poke-sub" style="margin-bottom:10px;white-space:pre-wrap;line-height:1.5">' + escapeHtml(e.description) + '</div>');
+    }
+
+    const chips = [];
+
+    for (const f of e.fields || []) {
+      const cls = ivClassFor(f.name, f.value);
+      chips.push(chip('<span class="lbl">' + escapeHtml(f.name) + '</span> <b>' + escapeHtml(f.value) + '</b>', cls));
+    }
+
+    if (e.footer) chips.push(chip(escapeHtml(e.footer)));
+    if (e.timestamp) chips.push(chip('🕐 ' + new Date(e.timestamp).toLocaleString('de-DE')));
+    if (e.thumbnail) chips.push(chip('🖼️ <a href="' + escapeHtml(e.thumbnail) + '" target="_blank" rel="noopener">Vorschaubild</a>'));
+    if (e.image) chips.push(chip('🖼️ <a href="' + escapeHtml(e.image) + '" target="_blank" rel="noopener">Bild</a>'));
+
+    if (chips.length) parts.push('<div class="chips">' + chips.join('') + '</div>');
+  }
+
+  if (parts.length === 0) return null;
+
+  return {
+    kind: 'spawn',
+    html: parts.join(''),
+    evBadge: '<span class="badge discord">Discord</span>',
+    embedColor,
+  };
+}
+
 function bodyHtml(entry) {
   const meta = entry.body;
 
   if (entry.type === 'json' && meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    if (looksLikeDiscord(meta)) {
+      const d = prettyDiscord(meta);
+      if (d) return d;
+    }
     const pretty = looksLikePokemonGo(meta) ? prettyPokemon(meta) : null;
     if (pretty) return pretty;
     return { kind: classifyKind(getEventName(meta)), html: '<pre>' + highlightJson(meta) + '</pre>', evBadge: '' };
@@ -215,6 +296,9 @@ function render(entry) {
 
   const body = bodyHtml(entry);
   if (body && body.kind) el.classList.add('e-' + body.kind);
+  if (body && body.embedColor != null) {
+    try { el.style.borderLeftColor = '#' + Number(body.embedColor).toString(16).padStart(6, '0'); } catch {}
+  }
 
   const head = document.createElement('div');
   head.className = 'event-head';

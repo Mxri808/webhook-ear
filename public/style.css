@@ -309,6 +309,7 @@ h1 {
   letter-spacing: 0.5px;
 }
 .badge.post { background: rgba(227, 53, 13, 0.18); color: #ff8a6b; }
+.badge.discord { background: rgba(88, 101, 242, 0.22); color: #9aa5ff; }
 .badge.get { background: rgba(52, 211, 153, 0.16); color: var(--green); }
 .badge.spawn { background: rgba(52, 211, 153, 0.16); color: var(--green); }
 .badge.raid { background: rgba(251, 191, 36, 0.16); color: var(--amber); }
