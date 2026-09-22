@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b0d12">
-  <title>Webhook-Ear · Live Webhook Empfänger</title>
+  <title>Poké-Ear · Pokémon Go Bot Webhooks</title>
   <link rel="stylesheet" href="/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='47' fill='%23fff' stroke='%23111' stroke-width='6'/><path d='M5 50a45 45 0 0 1 90 0z' fill='%23e3350d'/><rect x='4' y='44' width='92' height='12' fill='%23111'/><circle cx='50' cy='50' r='15' fill='%23fff' stroke='%23111' stroke-width='6'/></svg>">
 </head>
 <body>
   <div class="glow glow-a"></div>
@@ -15,15 +15,20 @@
   <header class="topbar">
     <div class="wrap">
       <div class="brand">
-        <span class="logo">📡</span>
+        <svg class="pokeball" viewBox="0 0 100 100" width="34" height="34" aria-hidden="true">
+          <circle cx="50" cy="50" r="47" fill="#fff" stroke="#111" stroke-width="6"/>
+          <path d="M5 50a45 45 0 0 1 90 0z" fill="#e3350d"/>
+          <rect x="4" y="44" width="92" height="12" fill="#111"/>
+          <circle cx="50" cy="50" r="15" fill="#fff" stroke="#111" stroke-width="6"/>
+        </svg>
         <div>
-          <h1>Webhook-Ear</h1>
-          <p class="tagline">Empfängt Webhooks · zeigt sie live an</p>
+          <h1>Poké-Ear</h1>
+          <p class="tagline">Live-Feed deines Pokémon-Go-Bots</p>
         </div>
       </div>
       <div class="top-right">
         <span id="status" class="status">Verbinde …</span>
-        <span class="pill">Free · 24/7</span>
+        <span class="pill">Bot Webhook</span>
       </div>
     </div>
   </header>
@@ -31,22 +36,22 @@
   <main class="wrap">
     <section class="hero">
       <div class="hero-text">
-        <span class="eyebrow">Deine Webhook-URL</span>
-        <p class="hint">Trage diese URL in die externe Website ein. Jede POST-Anfrage erscheint hier sofort und live.</p>
+        <span class="eyebrow">Webhook-URL deines Bots</span>
+        <p class="hint">Trage diese URL in deinen Pokémon-Go-Bot ein. Spawns, Raids und alle anderen Events erscheinen hier sofort live.</p>
       </div>
       <div class="row url-row">
         <input id="url" type="text" readonly spellcheck="false">
         <button id="copy" class="btn primary">Kopieren</button>
-        <button id="test" class="btn ghost">Test senden</button>
+        <button id="test" class="btn ghost">Test-Spawn</button>
       </div>
       <div class="stats">
         <div class="stat">
           <span class="stat-num" id="count">0</span>
-          <span class="stat-label">Empfangen</span>
+          <span class="stat-label">Events gesamt</span>
         </div>
         <div class="stat">
           <span class="stat-num" id="lastTime">–</span>
-          <span class="stat-label">Letztes Ereignis</span>
+          <span class="stat-label">Letztes Event</span>
         </div>
         <div class="stat">
           <span class="stat-num" id="connState">–</span>
@@ -66,17 +71,17 @@
 
       <div id="events" class="events"></div>
       <div id="empty" class="empty">
-        <span class="empty-icon">🎧</span>
-        <p>Noch keine Webhooks empfangen.</p>
-        <p class="empty-sub">Klicke auf „Test senden", um die erste Nachricht zu erzeugen.</p>
+        <span class="empty-icon">🎯</span>
+        <p>Noch keine Events vom Bot empfangen.</p>
+        <p class="empty-sub">Klicke auf „Test-Spawn", um ein Beispiel-Event zu erzeugen.</p>
       </div>
     </section>
   </main>
 
   <footer class="foot">
     <div class="wrap">
-      <span>Webhook-Ear</span>
-      <span class="dim">GET/POST <code>/hook</code> · Events über <code>/events</code></span>
+      <span>Poké-Ear</span>
+      <span class="dim">Bot sendet an <code>/hook</code> · Events live über <code>/events</code></span>
     </div>
   </footer>
 
