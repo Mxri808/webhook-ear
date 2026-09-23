@@ -353,6 +353,11 @@ h1 {
   background: rgba(227, 53, 13, 0.12);
   border-color: rgba(227, 53, 13, 0.5);
 }
+.subfilter.paused.active {
+  color: var(--amber);
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.45);
+}
 
 .sub-count {
   background: rgba(0, 0, 0, 0.35);
@@ -364,6 +369,7 @@ h1 {
 }
 .subfilter.err .sub-count { color: #ff8a6b; border-color: rgba(227, 53, 13, 0.4); }
 .subfilter.ok .sub-count { color: var(--green); border-color: rgba(52, 211, 153, 0.35); }
+.subfilter.paused .sub-count { color: var(--amber); border-color: rgba(251, 191, 36, 0.35); }
 
 /* ---------- Events ---------- */
 .events { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
@@ -389,6 +395,12 @@ h1 {
 .event.e-other { border-left-color: var(--muted); }
 .event.e-top { border-left-color: var(--yellow) !important; box-shadow: 0 0 26px -16px rgba(255, 203, 5, 0.9); }
 .event.e-top:hover { box-shadow: 0 16px 34px -18px rgba(255, 203, 5, 0.55); }
+.event.e-stopped {
+  border-left-color: rgba(151, 160, 179, 0.95) !important;
+  background: linear-gradient(165deg, rgba(151, 160, 179, 0.1), rgba(151, 160, 179, 0.02));
+  box-shadow: 0 0 26px -16px rgba(151, 160, 179, 0.8);
+}
+.event.e-stopped:hover { box-shadow: 0 16px 34px -18px rgba(151, 160, 179, 0.45); }
 .event.e-error {
   border-left-color: var(--red) !important;
   background: linear-gradient(165deg, rgba(227, 53, 13, 0.1), rgba(227, 53, 13, 0.03));
@@ -440,6 +452,7 @@ h1 {
 .badge.discord { background: rgba(88, 101, 242, 0.22); color: #9aa5ff; }
 .badge.error { background: rgba(227, 53, 13, 0.22); color: #ff8a6b; border: 1px solid rgba(227, 53, 13, 0.45); }
 .badge.ok { background: rgba(52, 211, 153, 0.16); color: var(--green); border: 1px solid rgba(52, 211, 153, 0.35); }
+.badge.paused { background: rgba(251, 191, 36, 0.16); color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.4); }
 .badge.get { background: rgba(52, 211, 153, 0.16); color: var(--green); }
 .badge.spawn { background: rgba(52, 211, 153, 0.16); color: var(--green); }
 .badge.raid { background: rgba(251, 191, 36, 0.16); color: var(--amber); }

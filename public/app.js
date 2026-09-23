@@ -18,6 +18,7 @@ const subfiltersEl = document.getElementById('subfilters');
 const subAllEl = document.getElementById('subAll');
 const subOkEl = document.getElementById('subOk');
 const subErrEl = document.getElementById('subErr');
+const subStoppedEl = document.getElementById('subStopped');
 const subBtns = Array.from(document.querySelectorAll('.subfilter'));
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
@@ -168,6 +169,35 @@ function isTopCatch(entry) {
   let s;
   try { s = JSON.stringify(b); } catch { s = String(b); }
   return TOP_RE.test(stripStats(s));
+}
+
+/* ---------- Stopped/Pause-Erkennung ---------- */
+
+function isStoppedEvent(entry) {
+  if (entry.type !== 'json' || entry.body == null) return false;
+  const b = entry.body;
+
+  if (typeof b === 'object' && !Array.isArray(b)) {
+    if (b.stopped === true || b.paused === true || b.is_paused === true ||
+        b.is_stopped === true || b.halted === true || b.is_pause === true) return true;
+
+    const st = String(b.status ?? b.state ?? b.mode ?? '').toLowerCase().trim();
+    if (/^(stopped|stop|paused|pause|halted|halt|idle)$/.test(st)) return true;
+
+    const ev = getEventName(b);
+    if (ev && !/pokestop/.test(ev) && /stop|pause|halt/.test(ev)) return true;
+
+    const msg = String(b.message || b.reason || b.description || '');
+    if (/\b(stopped|paused|gestoppt|angehalten|pausiert)\b/i.test(msg) || /\bpause\b/i.test(msg)) return true;
+  }
+
+  let s;
+  try { s = typeof b === 'object' ? JSON.stringify(b) : String(b); } catch { s = String(b); }
+  // false-Flags vorher entfernen (z. B. "paused": false)
+  s = s.replace(/"(stopped|paused|is_paused|is_stopped|is_pause)"\s*[::]\s*(false|null|0(?!\d))/gi, ' ');
+  if (/\b(stopped|paused|gestoppt|angehalten|pausiert)\b/i.test(s)) return true;
+  if (/\bpause\b/i.test(s)) return true;
+  return false;
 }
 
 /* ---------- Fehler-Erkennung ---------- */
@@ -404,6 +434,7 @@ function makeEventEl(item) {
   el.className = 'event';
   el.dataset.id = entry.id;
   if (item.scope !== 'all') el.classList.add('e-top');
+  if (item.stopped) el.classList.add('e-stopped');
   if (item.error) el.classList.add('e-error');
 
   const body = bodyHtml(entry);
@@ -414,7 +445,9 @@ function makeEventEl(item) {
 
   const statusBadge = item.error
     ? '<span class="badge error">❌ Fehler</span>'
-    : '<span class="badge ok">✅ OK</span>';
+    : item.stopped
+      ? '<span class="badge paused">⏸ Stopped</span>'
+      : '<span class="badge ok">✅ OK</span>';
 
   const head = document.createElement('div');
   head.className = 'event-head';
@@ -455,19 +488,21 @@ function scopeOf(entry) {
   return isTopCatch(entry) ? 'both' : 'all';
 }
 
-function showsInTab(scope, error) {
+function showsInTab(scope, error, stopped) {
   if (activeTab === 'top') return scope === 'top' || scope === 'both';
   if (scope === 'top') return false;
-  if (subFilter === 'ok') return !error;
+  if (subFilter === 'ok') return !error && !stopped;
   if (subFilter === 'err') return error;
+  if (subFilter === 'stopped') return stopped;
   return true;
 }
 
 function updateCounters() {
   const overview = allEntries.filter((e) => e.scope === 'all' || e.scope === 'both');
   const top = allEntries.filter((e) => e.scope === 'top' || e.scope === 'both').length;
-  const ok = overview.filter((e) => !e.error).length;
+  const ok = overview.filter((e) => !e.error && !e.stopped).length;
   const err = overview.filter((e) => e.error).length;
+  const stopped = overview.filter((e) => e.stopped).length;
 
   countEl.textContent = String(overview.length);
   topCountEl.textContent = String(top);
@@ -476,10 +511,11 @@ function updateCounters() {
   subAllEl.textContent = String(overview.length);
   subOkEl.textContent = String(ok);
   subErrEl.textContent = String(err);
+  subStoppedEl.textContent = String(stopped);
 }
 
 function updateEmptyState() {
-  const visible = allEntries.filter((e) => showsInTab(e.scope, e.error)).length;
+  const visible = allEntries.filter((e) => showsInTab(e.scope, e.error, e.stopped)).length;
   if (visible > 0) {
     emptyEl.classList.add('hidden');
     return;
@@ -488,6 +524,9 @@ function updateEmptyState() {
   if (activeTab === 'top') {
     emptyTitleEl.textContent = 'Noch keine Top-Fänge.';
     emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background landen automatisch hier.';
+  } else if (subFilter === 'stopped') {
+    emptyTitleEl.textContent = 'Keine Stop-/Pause-Meldungen.';
+    emptySubEl.textContent = '⏸ Gestoppte oder pausierte Accounts würden hier erscheinen.';
   } else if (subFilter === 'err') {
     emptyTitleEl.textContent = 'Keine Fehler — alles läuft! 🎉';
     emptySubEl.textContent = 'Fehlerhafte Events würden hier rot erscheinen.';
@@ -539,7 +578,7 @@ function updateRate() {
 function rebuildList() {
   eventsEl.innerHTML = '';
   for (const item of allEntries) {
-    if (showsInTab(item.scope, item.error)) {
+    if (showsInTab(item.scope, item.error, item.stopped)) {
       const el = makeEventEl(item);
       eventsEl.prepend(el);
     }
@@ -555,10 +594,11 @@ function addEntry(entry) {
     entry,
     scope: scopeOf(entry),
     error: isErrorEvent(entry),
+    stopped: isStoppedEvent(entry),
   };
   allEntries.push(item);
 
-  if (showsInTab(item.scope, item.error)) {
+  if (showsInTab(item.scope, item.error, item.stopped)) {
     eventsEl.prepend(makeEventEl(item));
   }
 
