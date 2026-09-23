@@ -20,7 +20,9 @@ const hookUrl = new URL('/hook', window.location.origin).toString();
 urlInput.value = hookUrl;
 
 let activeTab = 'all';
-const allEntries = []; // { entry, top }
+const CHANNEL_TOP = 'catch-info';      // Webhook/Kanal für Top-Fänge
+const CHANNEL_SUMMARY = 'summerie';    // Webhook/Kanal für die Übersicht
+const allEntries = []; // { entry, scope: 'all' | 'top' | 'both' }
 const seenIds = new Set();
 
 function setStatus(state) {
@@ -348,13 +350,27 @@ function makeEventEl(entry) {
   return el;
 }
 
-function showsInTab(top) {
-  return activeTab === 'all' || top;
+function getChannel(entry) {
+  const b = entry.body;
+  if (b && typeof b === 'object' && b.channel) return String(b.channel).toLowerCase().trim();
+  return '';
+}
+
+function scopeOf(entry) {
+  const ch = getChannel(entry);
+  if (ch === CHANNEL_TOP) return 'top';       // nur im Tab Top-Fänge
+  if (ch === CHANNEL_SUMMARY) return 'all';   // nur im Tab Übersicht
+  return isTopCatch(entry) ? 'both' : 'all';  // direkte Tests ohne Kanal
+}
+
+function showsInTab(scope) {
+  if (activeTab === 'all') return scope === 'all' || scope === 'both';
+  return scope === 'top' || scope === 'both';
 }
 
 function updateCounters() {
-  const total = allEntries.length;
-  const top = allEntries.filter((e) => e.top).length;
+  const total = allEntries.filter((e) => e.scope === 'all' || e.scope === 'both').length;
+  const top = allEntries.filter((e) => e.scope === 'top' || e.scope === 'both').length;
   countEl.textContent = String(total);
   topCountEl.textContent = String(top);
   tabCountAllEl.textContent = String(total);
@@ -362,25 +378,29 @@ function updateCounters() {
 }
 
 function updateEmptyState() {
-  const visible = allEntries.filter((e) => showsInTab(e.top)).length;
+  const visible = allEntries.filter((e) => showsInTab(e.scope)).length;
   if (visible > 0) {
     emptyEl.classList.add('hidden');
     return;
   }
   emptyEl.classList.remove('hidden');
   if (activeTab === 'top') {
-    emptyTitleEl.textContent = 'Noch keine Top-Fänge.';
-    emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background-Pokémon landen automatisch hier.';
+    emptyTitleEl.textContent = 'Noch keine Nachrichten aus #' + CHANNEL_TOP + '.';
+    emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background landen automatisch hier.';
   } else {
     emptyTitleEl.textContent = 'Noch keine Events vom Bot empfangen.';
-    emptySubEl.textContent = 'Klicke auf „Test-Spawn", um ein Beispiel-Event zu erzeugen.';
+    emptySubEl.textContent = 'Alles aus #' + CHANNEL_SUMMARY + ' erscheint in dieser Übersicht.';
   }
 }
 
 function rebuildList() {
   eventsEl.innerHTML = '';
   for (const item of allEntries) {
-    if (showsInTab(item.top)) eventsEl.prepend(makeEventEl(item.entry));
+    if (showsInTab(item.scope)) {
+      const el = makeEventEl(item.entry);
+      if (item.scope === 'top') el.classList.add('e-top');
+      eventsEl.prepend(el);
+    }
   }
   updateEmptyState();
 }
@@ -389,11 +409,13 @@ function addEntry(entry) {
   if (entry == null || entry.id == null || seenIds.has(entry.id)) return;
   seenIds.add(entry.id);
 
-  const top = isTopCatch(entry);
-  allEntries.push({ entry, top });
+  const scope = scopeOf(entry);
+  allEntries.push({ entry, scope });
 
-  if (showsInTab(top)) {
-    eventsEl.prepend(makeEventEl(entry));
+  if (showsInTab(scope)) {
+    const el = makeEventEl(entry);
+    if (scope === 'top') el.classList.add('e-top');
+    eventsEl.prepend(el);
   }
 
   updateCounters();

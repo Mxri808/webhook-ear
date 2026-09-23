@@ -337,6 +337,7 @@ h1 {
 .event.e-quest { border-left-color: var(--purple); }
 .event.e-gym { border-left-color: var(--blue); }
 .event.e-other { border-left-color: var(--muted); }
+.event.e-top { border-left-color: var(--yellow); box-shadow: 0 0 24px -16px rgba(255, 203, 5, 0.9); }
 
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(-8px); }
