@@ -121,6 +121,7 @@ function pinnedItems() {
     scope: 'both',
     error: isErrorEvent(entry),
     stopped: isStoppedEvent(entry),
+    start: isStartEvent(entry),
     _hay: haystack(entry),
     pinned: true,
   }));
@@ -546,6 +547,33 @@ function isStoppedEvent(entry) {
   return false;
 }
 
+/* ---------- Start-Meldungen (zählt nicht als Account-Aktion) ---------- */
+
+function isStartEvent(entry) {
+  if (entry.type !== 'json' || entry.body == null) return false;
+  const b = entry.body;
+
+  if (typeof b === 'object' && !Array.isArray(b)) {
+    if (b.started === true || b.is_started === true || b.starting === true) return true;
+
+    const st = String(b.status ?? b.state ?? b.mode ?? '').toLowerCase().trim();
+    if (/^(started|start|starting)$/.test(st)) return true;
+
+    const ev = getEventName(b);
+    if (ev && !/pokestop/.test(ev) && /start/.test(ev)) return true;
+
+    const msg = String(b.message || b.reason || b.description || '');
+    if (/\b(started|starting|gestartet|wurde gestartet)\b/i.test(msg)) return true;
+  }
+
+  let s;
+  try { s = typeof b === 'object' ? JSON.stringify(b) : String(b); } catch { s = String(b); }
+  s = s.replace(/"(started|is_started|starting)"\s*[::]\s*(false|null|0(?!\d))/gi, ' ');
+  if (/\bstarted\b|\bstarting\b|\bgestartet\b/i.test(s)) return true;
+  if (/\bstart\b/i.test(s) && /\bbot\b|\baccount\b|\bsession\b|\bserver\b/i.test(s)) return true;
+  return false;
+}
+
 /* ---------- Fehler-Erkennung ---------- */
 
 function isErrorEvent(entry) {
@@ -950,8 +978,9 @@ function updateEmptyState() {
 function updateRate() {
   updateSpark();
   const now = Date.now();
+  // Accounts/Stunde: nur echte Aktionen – Fehler, Start, Stop, Pause zählen NICHT
   const times = allEntries
-    .filter((e) => getChannel(e.entry) !== '') // nur echte Bot-/Discord-Nachrichten, keine Tests
+    .filter((e) => getChannel(e.entry) !== '' && !e.error && !e.stopped && !e.start)
     .map((e) => new Date(e.entry.time).getTime())
     .filter((t) => !Number.isNaN(t))
     .sort((a, b) => a - b);
@@ -1013,6 +1042,7 @@ function addEntry(entry) {
     scope: scopeOf(entry),
     error: isErrorEvent(entry),
     stopped: isStoppedEvent(entry),
+    start: isStartEvent(entry),
     _hay: haystack(entry),
   };
   allEntries.push(item);

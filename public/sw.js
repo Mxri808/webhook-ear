@@ -1,5 +1,5 @@
 /* Poké-Ear Service Worker – Cache-Version bei Änderungen erhöhen! */
-const CACHE = 'poke-ear-v2';
+const CACHE = 'poke-ear-v3';
 const CORE = ['/', '/index.html', '/app.js', '/style.css', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
