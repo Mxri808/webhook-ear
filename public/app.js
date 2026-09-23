@@ -1,5 +1,3 @@
-const urlInput = document.getElementById('url');
-const copyBtn = document.getElementById('copy');
 const testBtn = document.getElementById('test');
 const clearBtn = document.getElementById('clear');
 const eventsEl = document.getElementById('events');
@@ -22,7 +20,6 @@ const subErrEl = document.getElementById('subErr');
 const subBtns = Array.from(document.querySelectorAll('.subfilter'));
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
-urlInput.value = hookUrl;
 
 let activeTab = 'all';
 let subFilter = 'all'; // 'all' | 'ok' | 'err' (nur Tab Übersicht)
@@ -531,12 +528,6 @@ function clearList() {
   updateEmptyState();
   fetch('/api/messages', { method: 'DELETE' }).catch(() => {});
 }
-
-copyBtn.addEventListener('click', async () => {
-  await navigator.clipboard.writeText(hookUrl);
-  copyBtn.textContent = 'Kopiert ✓';
-  setTimeout(() => { copyBtn.textContent = 'Kopieren'; }, 1500);
-});
 
 testBtn.addEventListener('click', async () => {
   await fetch(hookUrl, {
