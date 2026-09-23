@@ -216,7 +216,7 @@ h1 {
 /* ---------- Stats ---------- */
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-top: 22px;
 }
@@ -267,6 +267,59 @@ h1 {
 
 .card-title h2 { font-size: 15px; margin: 0; }
 .card-head .btn { margin-left: auto; }
+
+/* ---------- Tabs ---------- */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tab {
+  flex: 1;
+  padding: 11px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.tab:hover { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+
+.tab.active {
+  color: var(--text);
+  background: rgba(227, 53, 13, 0.12);
+  border-color: rgba(227, 53, 13, 0.5);
+}
+
+.tab.top.active {
+  color: var(--yellow);
+  background: rgba(255, 203, 5, 0.1);
+  border-color: rgba(255, 203, 5, 0.55);
+  box-shadow: 0 0 22px -10px rgba(255, 203, 5, 0.8);
+}
+
+.tab-count {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tab.top .tab-count {
+  color: var(--yellow);
+  border-color: rgba(255, 203, 5, 0.4);
+}
 
 /* ---------- Events ---------- */
 .events { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
@@ -406,9 +459,10 @@ pre {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 620px) {
-  .stats { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
   .hero, .card { padding: 20px; }
   .url-row input[type="text"] { min-width: 100%; }
   .row .btn { flex: 1; justify-content: center; }
   .topbar .wrap { flex-direction: column; align-items: flex-start; }
+  .tabs { flex-direction: column; }
 }

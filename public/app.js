@@ -4,15 +4,24 @@ const testBtn = document.getElementById('test');
 const clearBtn = document.getElementById('clear');
 const eventsEl = document.getElementById('events');
 const emptyEl = document.getElementById('empty');
+const emptyTitleEl = document.getElementById('emptyTitle');
+const emptySubEl = document.getElementById('emptySub');
 const countEl = document.getElementById('count');
-const statusEl = document.getElementById('status');
+const topCountEl = document.getElementById('topCount');
 const lastTimeEl = document.getElementById('lastTime');
+const statusEl = document.getElementById('status');
 const connStateEl = document.getElementById('connState');
+const tabAllBtn = document.getElementById('tabAll');
+const tabTopBtn = document.getElementById('tabTop');
+const tabCountAllEl = document.getElementById('tabCountAll');
+const tabCountTopEl = document.getElementById('tabCountTop');
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
 urlInput.value = hookUrl;
 
-let count = 0;
+let activeTab = 'all';
+const allEntries = []; // { entry, top }
+const seenIds = new Set();
 
 function setStatus(state) {
   if (state === 'online') {
@@ -59,7 +68,7 @@ function getIv(o) {
     const s = iv.stamina ?? iv.sta ?? 0;
     if (a || d || s) return Math.round(((a + d + s) / 45) * 100);
   }
-  if (o.individual_attacks && o.individual_defense != null) {
+  if (o.individual_attacks != null && o.individual_defense != null) {
     const total = (o.individual_attacks || 0) + (o.individual_defense || 0) + (o.individual_stamina || 0);
     if (total) return Math.round((total / 45) * 100);
   }
@@ -82,7 +91,7 @@ function looksLikePokemonGo(o) {
   return (
     o.pokemon_id != null || o.pokemonName != null || o.pokemon_name != null ||
     o.cp != null || o.individual_values != null || o.raid_boss != null ||
-    o.move_1 != null || o.spawnpoint_id != null || o.pokemon != null && o.pokemon.id != null
+    o.move_1 != null || o.spawnpoint_id != null || (o.pokemon != null && o.pokemon.id != null)
   );
 }
 
@@ -93,6 +102,32 @@ function classifyKind(ev) {
   if (/pokemon|spawn|lure|wild/.test(ev)) return 'spawn';
   if (!ev) return 'spawn';
   return 'other';
+}
+
+/* ---------- Top-Fang-Erkennung (shiny / hundo / background) ---------- */
+
+function isTopCatch(entry) {
+  if (entry.type !== 'json' || entry.body == null) return false;
+  const b = entry.body;
+
+  if (typeof b === 'object' && !Array.isArray(b)) {
+    const iv = getIv(b);
+    if (iv != null && Number(iv) >= 100) return true;
+    if (b.shiny === true || b.is_shiny === true || b.shiny === 1) return true;
+    if (b.background === true || b.has_background === true || b.is_background === true) return true;
+    if (typeof b.background === 'string' && b.background) return true;
+    if (b.pokemon_background || b.location_background) return true;
+  }
+
+  let s;
+  try { s = JSON.stringify(b); } catch { s = String(b); }
+
+  if (/\bhundo\b|\bperfect\b/i.test(s)) return true;
+  if (/\bshiny\b|✨/i.test(s)) return true;
+  if (/\bbackground\b/i.test(s)) return true;
+  if (/\b100\s*%/.test(s)) return true;
+  if (/\biv\b[^\d]{0,12}100(?!\d)/i.test(s)) return true;
+  return false;
 }
 
 function chip(html, cls) {
@@ -132,8 +167,10 @@ function prettyPokemon(o) {
   const legendary = o.legendary === true || o.mythical === true || o.rarity === 'legendary' || o.rarity === 'mythical';
   if (legendary) chips.push(chip(o.mythical ? '🌟 Mythisch' : '👑 Legendär', 'legendary'));
 
-  const gender = o.gender;
-  if (gender) chips.push(chip(escapeHtml(gender)));
+  const bg = o.background || o.pokemon_background || o.location_background;
+  if (bg) chips.push(chip('🏞️ Background', 'perfect'));
+
+  if (o.gender) chips.push(chip(escapeHtml(o.gender)));
 
   const weather = o.weather || o.weather_boost;
   if (weather) chips.push(chip('☁️ ' + escapeHtml(weather)));
@@ -148,7 +185,7 @@ function prettyPokemon(o) {
     const gym = o.gym_name || o.gym;
     if (gym) chips.push(chip('🏟️ <b>' + escapeHtml(gym) + '</b>'));
   }
-  if (o.raid_level || o.raid_level_raw != null || o.level && kind === 'raid') {
+  if (o.raid_level != null || o.raid_level_raw != null || (o.level && kind === 'raid')) {
     chips.push(chip('<span class="lbl">Raid-Lv.</span> <b>' + escapeHtml(o.raid_level ?? o.raid_level_raw ?? o.level) + '</b>'));
   }
   if (o.team) chips.push(chip('🛡️ Team: <b>' + escapeHtml(o.team) + '</b>'));
@@ -158,9 +195,7 @@ function prettyPokemon(o) {
   }
 
   const kindLabel = { spawn: 'Spawn', raid: 'Raid', gym: 'Gym', quest: 'Quest', other: 'Event' }[kind];
-  const evBadge = ev
-    ? '<span class="badge ' + kind + '">' + escapeHtml(kindLabel) + '</span>'
-    : '<span class="badge ' + kind + '">' + escapeHtml(kindLabel) + '</span>';
+  const evBadge = '<span class="badge ' + kind + '">' + escapeHtml(kindLabel) + '</span>';
 
   let title = '';
   if (name || dex != null) {
@@ -176,11 +211,7 @@ function prettyPokemon(o) {
 
   if (chips.length === 0 && !title) return null;
 
-  return {
-    kind,
-    html: title + '<div class="chips">' + chips.join('') + '</div>',
-    evBadge,
-  };
+  return { kind, html: title + '<div class="chips">' + chips.join('') + '</div>', evBadge };
 }
 
 /* ---------- Discord-Embed-Erkennung ---------- */
@@ -209,9 +240,7 @@ function prettyDiscord(o) {
     const metaBits = [];
     if (o.author) metaBits.push('🤖 ' + escapeHtml(o.author));
     if (o.channel) metaBits.push('#' + escapeHtml(o.channel));
-    if (metaBits.length) {
-      parts.push('<div class="poke-sub" style="margin-bottom:8px">' + metaBits.join(' · ') + '</div>');
-    }
+    if (metaBits.length) parts.push('<div class="poke-sub" style="margin-bottom:8px">' + metaBits.join(' · ') + '</div>');
   }
 
   if (o.content) {
@@ -252,13 +281,10 @@ function prettyDiscord(o) {
 
   if (parts.length === 0) return null;
 
-  return {
-    kind: 'spawn',
-    html: parts.join(''),
-    evBadge: '<span class="badge discord">Discord</span>',
-    embedColor,
-  };
+  return { kind: 'spawn', html: parts.join(''), evBadge: '<span class="badge discord">Discord</span>', embedColor };
 }
+
+/* ---------- Anzeige ---------- */
 
 function bodyHtml(entry) {
   const meta = entry.body;
@@ -289,9 +315,7 @@ function bodyHtml(entry) {
   return { kind: 'other', html: '<pre><i>Leerer Body</i></pre>', evBadge: '' };
 }
 
-function render(entry) {
-  if (entry && entry.id != null && eventsEl.querySelector('[data-id="' + entry.id + '"]')) return;
-
+function makeEventEl(entry) {
   const el = document.createElement('div');
   el.className = 'event';
   el.dataset.id = entry.id;
@@ -321,19 +345,79 @@ function render(entry) {
 
   el.appendChild(head);
   el.appendChild(document.createRange().createContextualFragment(body.html));
-  eventsEl.prepend(el);
-
-  count += 1;
-  countEl.textContent = String(count);
-  lastTimeEl.textContent = time;
-  emptyEl.classList.add('hidden');
+  return el;
 }
 
-function clearList() {
-  eventsEl.innerHTML = '';
-  count = 0;
-  countEl.textContent = '0';
+function showsInTab(top) {
+  return activeTab === 'all' || top;
+}
+
+function updateCounters() {
+  const total = allEntries.length;
+  const top = allEntries.filter((e) => e.top).length;
+  countEl.textContent = String(total);
+  topCountEl.textContent = String(top);
+  tabCountAllEl.textContent = String(total);
+  tabCountTopEl.textContent = String(top);
+}
+
+function updateEmptyState() {
+  const visible = allEntries.filter((e) => showsInTab(e.top)).length;
+  if (visible > 0) {
+    emptyEl.classList.add('hidden');
+    return;
+  }
   emptyEl.classList.remove('hidden');
+  if (activeTab === 'top') {
+    emptyTitleEl.textContent = 'Noch keine Top-Fänge.';
+    emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background-Pokémon landen automatisch hier.';
+  } else {
+    emptyTitleEl.textContent = 'Noch keine Events vom Bot empfangen.';
+    emptySubEl.textContent = 'Klicke auf „Test-Spawn", um ein Beispiel-Event zu erzeugen.';
+  }
+}
+
+function rebuildList() {
+  eventsEl.innerHTML = '';
+  for (const item of allEntries) {
+    if (showsInTab(item.top)) eventsEl.prepend(makeEventEl(item.entry));
+  }
+  updateEmptyState();
+}
+
+function addEntry(entry) {
+  if (entry == null || entry.id == null || seenIds.has(entry.id)) return;
+  seenIds.add(entry.id);
+
+  const top = isTopCatch(entry);
+  allEntries.push({ entry, top });
+
+  if (showsInTab(top)) {
+    eventsEl.prepend(makeEventEl(entry));
+  }
+
+  updateCounters();
+  lastTimeEl.textContent = new Date(entry.time).toLocaleTimeString('de-DE');
+  updateEmptyState();
+}
+
+function switchTab(tab) {
+  if (activeTab === tab) return;
+  activeTab = tab;
+  tabAllBtn.classList.toggle('active', tab === 'all');
+  tabTopBtn.classList.toggle('active', tab === 'top');
+  rebuildList();
+}
+
+tabAllBtn.addEventListener('click', () => switchTab('all'));
+tabTopBtn.addEventListener('click', () => switchTab('top'));
+
+function clearList() {
+  allEntries.length = 0;
+  seenIds.clear();
+  eventsEl.innerHTML = '';
+  updateCounters();
+  updateEmptyState();
   fetch('/api/messages', { method: 'DELETE' }).catch(() => {});
 }
 
@@ -354,11 +438,12 @@ testBtn.addEventListener('click', async () => {
       form: 'Normal',
       cp: 3120,
       level: 34,
-      iv: 98,
-      individual_values: { attack: 15, defense: 15, stamina: 14 },
+      iv: 100,
+      individual_values: { attack: 15, defense: 15, stamina: 15 },
       move_1_name: 'Drachenklaue',
       move_2_name: 'Drachenpuls',
       shiny: true,
+      background: true,
       legendary: false,
       latitude: 48.13743,
       longitude: 11.57549,
@@ -373,7 +458,7 @@ function loadHistory() {
   fetch('/api/messages')
     .then((r) => r.json())
     .then((d) => {
-      (d.messages || []).forEach((m) => render(m));
+      (d.messages || []).forEach((m) => addEntry(m));
     })
     .catch(() => {});
 }
@@ -383,7 +468,7 @@ function connect() {
   es.onopen = () => setStatus('online');
   es.onerror = () => { setStatus('offline'); es.close(); setTimeout(connect, 2000); };
   es.onmessage = (e) => {
-    try { render(JSON.parse(e.data)); } catch {}
+    try { addEntry(JSON.parse(e.data)); } catch {}
   };
 }
 

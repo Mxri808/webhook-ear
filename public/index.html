@@ -50,6 +50,10 @@
           <span class="stat-label">Events gesamt</span>
         </div>
         <div class="stat">
+          <span class="stat-num" id="topCount">0</span>
+          <span class="stat-label">⭐ Top-Fänge</span>
+        </div>
+        <div class="stat">
           <span class="stat-num" id="lastTime">–</span>
           <span class="stat-label">Letztes Event</span>
         </div>
@@ -69,11 +73,20 @@
         <button id="clear" class="btn ghost small">Leeren</button>
       </div>
 
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="all" id="tabAll" role="tab">
+          📊 Übersicht <span class="tab-count" id="tabCountAll">0</span>
+        </button>
+        <button class="tab top" data-tab="top" id="tabTop" role="tab">
+          ⭐ Top-Fänge <span class="tab-count" id="tabCountTop">0</span>
+        </button>
+      </div>
+
       <div id="events" class="events"></div>
       <div id="empty" class="empty">
         <span class="empty-icon">🎯</span>
-        <p>Noch keine Events vom Bot empfangen.</p>
-        <p class="empty-sub">Klicke auf „Test-Spawn", um ein Beispiel-Event zu erzeugen.</p>
+        <p id="emptyTitle">Noch keine Events vom Bot empfangen.</p>
+        <p class="empty-sub" id="emptySub">Klicke auf „Test-Spawn", um ein Beispiel-Event zu erzeugen.</p>
       </div>
     </section>
   </main>
