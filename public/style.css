@@ -373,41 +373,66 @@ h1 {
 .subfilter.ok .sub-count { color: var(--green); border-color: rgba(52, 211, 153, 0.35); }
 
 /* ---------- Events ---------- */
-.events { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.events { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
 
 .event {
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 15px 17px;
-  background: rgba(0, 0, 0, 0.3);
-  animation: slideIn 0.25s ease;
+  border-radius: 16px;
+  padding: 17px 19px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  animation: slideIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
   border-left: 3px solid var(--red);
+  transition: transform 0.18s ease, box-shadow 0.25s ease, border-color 0.18s ease;
+}
+.event:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px -20px rgba(0, 0, 0, 0.95);
+  border-color: var(--border-strong);
 }
 
 .event.e-raid { border-left-color: var(--amber); }
 .event.e-quest { border-left-color: var(--purple); }
 .event.e-gym { border-left-color: var(--blue); }
 .event.e-other { border-left-color: var(--muted); }
-.event.e-top { border-left-color: var(--yellow) !important; box-shadow: 0 0 24px -16px rgba(255, 203, 5, 0.9); }
+.event.e-top { border-left-color: var(--yellow) !important; box-shadow: 0 0 26px -16px rgba(255, 203, 5, 0.9); }
+.event.e-top:hover { box-shadow: 0 16px 34px -18px rgba(255, 203, 5, 0.55); }
 .event.e-error {
   border-left-color: var(--red) !important;
-  background: rgba(227, 53, 13, 0.08);
-  box-shadow: 0 0 24px -16px rgba(227, 53, 13, 0.9);
+  background: linear-gradient(165deg, rgba(227, 53, 13, 0.1), rgba(227, 53, 13, 0.03));
+  box-shadow: 0 0 26px -16px rgba(227, 53, 13, 0.9);
 }
+.event.e-error:hover { box-shadow: 0 16px 34px -18px rgba(227, 53, 13, 0.6); }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(-10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .event-head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 10px;
+  margin-bottom: 13px;
+}
+
+.event-meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-head .time, .event-head .id {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11.5px;
 }
 
 .badge {
@@ -433,7 +458,6 @@ h1 {
 .badge.roh { background: rgba(227, 53, 13, 0.16); color: #ff8a6b; }
 .badge.leer { background: rgba(151, 160, 179, 0.16); color: var(--muted); }
 
-.event-head .time, .event-head .id { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---------- Pokémon-Info ---------- */
 .poke-title {
@@ -441,37 +465,75 @@ h1 {
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 11px;
+  margin-bottom: 13px;
 }
 
 .poke-name {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.2px;
+  font-size: 17.5px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  background: linear-gradient(90deg, #fff, #d7deeb);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .poke-sub { font-size: 12.5px; color: var(--muted); }
 
+.dex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.embed-desc {
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 11px 14px;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: 13.5px;
+  color: #dfe5ef;
+}
+
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .chip {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.055);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 11px;
-  font-size: 12.5px;
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  transition: border-color 0.15s, background 0.15s;
 }
-.chip b { font-weight: 700; }
-.chip .lbl { color: var(--muted); font-size: 11.5px; }
+.chip:hover { border-color: var(--border-strong); background: rgba(255, 255, 255, 0.08); }
+.chip b { font-weight: 700; font-size: 13.5px; }
+.chip .lbl {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
 
 .chip.iv-great { color: var(--green); border-color: rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.08); }
 .chip.iv-good { color: var(--yellow); border-color: rgba(255, 203, 5, 0.35); background: rgba(255, 203, 5, 0.07); }
-.chip.shiny { color: var(--yellow); border-color: rgba(255, 203, 5, 0.55); background: rgba(255, 203, 5, 0.12); box-shadow: 0 0 14px -4px rgba(255, 203, 5, 0.7); }
+.chip.shiny { color: var(--yellow); border-color: rgba(255, 203, 5, 0.55); background: rgba(255, 203, 5, 0.12); box-shadow: 0 0 16px -5px rgba(255, 203, 5, 0.75); }
 .chip.legendary { color: var(--amber); border-color: rgba(251, 191, 36, 0.45); }
-.chip.perfect { color: var(--green); border-color: rgba(52, 211, 153, 0.6); box-shadow: 0 0 14px -4px rgba(52, 211, 153, 0.8); }
+.chip.perfect { color: var(--green); border-color: rgba(52, 211, 153, 0.6); box-shadow: 0 0 16px -5px rgba(52, 211, 153, 0.85); }
+.chip.iv-great, .chip.iv-good, .chip.perfect {
+  font-size: 14.5px;
+  padding: 8px 15px;
+}
 .chip a { color: #7db8e8; text-decoration: none; font-weight: 600; }
 .chip a:hover { text-decoration: underline; }
 
@@ -479,11 +541,15 @@ pre {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12.5px;
-  line-height: 1.55;
+  line-height: 1.6;
   overflow-x: auto;
-  color: var(--text);
+  color: #d7deeb;
   white-space: pre-wrap;
   word-break: break-word;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
 }
 
 .key { color: #7dd3fc; }

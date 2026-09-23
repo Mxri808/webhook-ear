@@ -234,7 +234,7 @@ function prettyPokemon(o) {
     title =
       '<div class="poke-title">' +
         '<span class="poke-name">' + escapeHtml(displayName) + '</span>' +
-        (dex != null && name ? '<span class="poke-sub">#' + escapeHtml(dex) + '</span>' : '') +
+        (dex != null && name ? '<span class="poke-sub dex">#' + escapeHtml(dex) + '</span>' : '') +
         (form && String(form).toLowerCase() !== 'normal' && String(form) !== '0' ? '<span class="poke-sub">· ' + escapeHtml(form) + '</span>' : '') +
         (ev ? '<span class="poke-sub">· ' + escapeHtml(ev) + '</span>' : '') +
       '</div>';
@@ -292,7 +292,8 @@ function prettyDiscord(o) {
     }
 
     if (e.description) {
-      parts.push('<div class="poke-sub" style="margin-bottom:10px;white-space:pre-wrap;line-height:1.5">' + escapeHtml(e.description) + '</div>');
+      const ec = e.color != null ? '#' + Number(e.color).toString(16).padStart(6, '0') : null;
+      parts.push('<div class="embed-desc"' + (ec ? ' style="border-left-color:' + ec + '"' : '') + '>' + escapeHtml(e.description) + '</div>');
     }
 
     const chips = [];
@@ -373,15 +374,17 @@ function makeEventEl(item) {
     '<span class="badge ' + escapeHtml((entry.method || '').toLowerCase()) + '">' + escapeHtml(entry.method || '') + '</span>' +
     statusBadge +
     (body.evBadge || '<span class="badge ' + escapeHtml(entry.type) + '">' + escapeHtml(entry.type) + '</span>') +
-    '<span class="time">' + time + '</span>' +
-    '<span class="id">#' + entry.id + '</span>';
+    '<span class="event-meta"><span class="time">' + time + '</span>' +
+    '<span class="id">#' + entry.id + '</span></span>';
 
   const contentType = entry.headers && entry.headers['content-type'];
   if (contentType) {
     const ct = document.createElement('span');
     ct.className = 'id';
     ct.textContent = contentType;
-    head.appendChild(ct);
+    const metaEl = head.querySelector('.event-meta');
+    if (metaEl) metaEl.appendChild(ct);
+    else head.appendChild(ct);
   }
 
   el.appendChild(head);
