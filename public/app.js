@@ -473,6 +473,7 @@ function updateEmptyState() {
 function updateRate() {
   const now = Date.now();
   const times = allEntries
+    .filter((e) => getChannel(e.entry) === CHANNEL_SUMMARY) // nur Übersicht-Webhook (#summerie)
     .map((e) => new Date(e.entry.time).getTime())
     .filter((t) => !Number.isNaN(t))
     .sort((a, b) => a - b);
