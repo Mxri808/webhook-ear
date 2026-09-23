@@ -134,6 +134,7 @@ async function serveStatic(req, res, urlPath) {
       '.css': 'text/css; charset=utf-8',
       '.svg': 'image/svg+xml',
       '.png': 'image/png',
+      '.webmanifest': 'application/manifest+json; charset=utf-8',
     }[ext] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': mime });
     res.end(data);

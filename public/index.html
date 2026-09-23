@@ -6,6 +6,19 @@
   <meta name="theme-color" content="#0b0d12">
   <title>Poké-Ear · Pokémon Go Bot Webhooks</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script>
+    try {
+      var t = localStorage.getItem('pe_theme');
+      if (t) document.documentElement.dataset.theme = t;
+      var a = localStorage.getItem('pe_accent');
+      if (a) document.documentElement.dataset.accent = a;
+    } catch (e) {}
+  </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='47' fill='%23fff' stroke='%23111' stroke-width='6'/><path d='M5 50a45 45 0 0 1 90 0z' fill='%23e3350d'/><rect x='4' y='44' width='92' height='12' fill='%23111'/><circle cx='50' cy='50' r='15' fill='%23fff' stroke='%23111' stroke-width='6'/></svg>">
 </head>
 <body>
@@ -30,6 +43,8 @@
         <span id="status" class="status">Verbinde …</span>
         <button id="soundToggle" class="icon-btn" title="Ton an/aus (Top-Fang & Fehler)">🔊</button>
         <button id="notifToggle" class="icon-btn" title="Desktop-Hinweise, auch im Hintergrund">🔕</button>
+        <button id="themeBtn" class="icon-btn" title="Hell/Dunkel wechseln">🌗</button>
+        <button id="accentBtn" class="icon-btn" title="Akzentfarbe wechseln">🎨</button>
         <span class="pill">Bot Webhook</span>
       </div>
     </div>
@@ -56,10 +71,15 @@
         <div class="stat">
           <span class="stat-num" id="rateCount">–</span>
           <span class="stat-label">📈 Accounts / Stunde</span>
+          <svg id="rateSpark" class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"></svg>
         </div>
         <div class="stat">
           <span class="stat-num" id="lastTime">–</span>
           <span class="stat-label">Letztes Event</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="uptimeCount">–</span>
+          <span class="stat-label">⏳ Server läuft seit</span>
         </div>
         <div class="stat">
           <span class="stat-num" id="connState">–</span>

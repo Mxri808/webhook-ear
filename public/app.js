@@ -35,6 +35,10 @@ const modalStarsEl = document.getElementById('modalStars');
 const modalJsonEl = document.getElementById('modalJson');
 const soundToggleEl = document.getElementById('soundToggle');
 const notifToggleEl = document.getElementById('notifToggle');
+const themeBtnEl = document.getElementById('themeBtn');
+const accentBtnEl = document.getElementById('accentBtn');
+const uptimeEl = document.getElementById('uptimeCount');
+const rateSparkEl = document.getElementById('rateSpark');
 const toastsEl = document.getElementById('toasts');
 const subBtns = Array.from(document.querySelectorAll('.subfilter'));
 
@@ -120,6 +124,130 @@ function pinnedItems() {
     _hay: haystack(entry),
     pinned: true,
   }));
+}
+
+/* ---------- Theme & Akzentfarbe ---------- */
+const ACCENTS = ['red', 'green', 'blue', 'purple', 'amber'];
+
+function applyAccent(name) {
+  document.documentElement.dataset.accent = name;
+  try { localStorage.setItem('pe_accent', name); } catch {}
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeBtnEl.textContent = theme === 'light' ? '☀️' : '🌗';
+  try { localStorage.setItem('pe_theme', theme); } catch {}
+}
+
+themeBtnEl.addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+});
+
+accentBtnEl.addEventListener('click', () => {
+  const cur = document.documentElement.dataset.accent || 'red';
+  const idx = Math.max(0, ACCENTS.indexOf(cur));
+  const next = ACCENTS[(idx + 1) % ACCENTS.length];
+  applyAccent(next);
+  showToast('stopped', 'Akzentfarbe', { red: '🔴 Pokéball-Rot', green: '🟢 Grün', blue: '🔵 Blau', purple: '🟣 Violett', amber: '🟡 Bernstein' }[next] || next);
+});
+
+// Theme-Icon initial setzen (Attribut kommt schon aus dem head-Script)
+applyTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+if (document.documentElement.dataset.accent) {
+  document.documentElement.dataset.accent = document.documentElement.dataset.accent;
+}
+
+/* ---------- Server-Status / Uptime ---------- */
+let serverStartedAt = null;
+
+function fmtDur(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ' + (m % 60 ? (m % 60) + 'm' : '');
+  const d = Math.floor(h / 24);
+  return d + 'd ' + (h % 24) + 'h';
+}
+
+function updateUptime() {
+  if (!uptimeEl) return;
+  if (!serverStartedAt) { uptimeEl.textContent = '…'; return; }
+  uptimeEl.textContent = fmtDur(Date.now() - serverStartedAt);
+}
+
+function fetchStatus() {
+  fetch('/api/status')
+    .then((r) => r.json())
+    .then((d) => {
+      if (d && d.startedAt) serverStartedAt = new Date(d.startedAt).getTime();
+      updateUptime();
+    })
+    .catch(() => {});
+}
+
+/* ---------- Typen-Farben ---------- */
+const TYPES = {
+  normal: ['Normal', '⚪', '#a8a878'],
+  fire: ['Feuer', '🔥', '#f08030'], feuer: ['Feuer', '🔥', '#f08030'],
+  water: ['Wasser', '💧', '#6890f0'], wasser: ['Wasser', '💧', '#6890f0'],
+  electric: ['Elektro', '⚡', '#f8d030'], elektro: ['Elektro', '⚡', '#f8d030'],
+  grass: ['Pflanze', '🌿', '#78c850'], gras: ['Pflanze', '🌿', '#78c850'], pflanze: ['Pflanze', '🌿', '#78c850'],
+  ice: ['Eis', '🧊', '#98d8d8'], eis: ['Eis', '🧊', '#98d8d8'],
+  fighting: ['Kampf', '🥊', '#c03028'], kampf: ['Kampf', '🥊', '#c03028'],
+  poison: ['Gift', '☠️', '#a040a0'], gift: ['Gift', '☠️', '#a040a0'],
+  ground: ['Boden', '🟫', '#e0c068'], boden: ['Boden', '🟫', '#e0c068'], erde: ['Boden', '🟫', '#e0c068'],
+  flying: ['Flug', '🕊️', '#a890f0'], flug: ['Flug', '🕊️', '#a890f0'],
+  psychic: ['Psy', '🔮', '#f85888'],
+  bug: ['Käfer', '🐛', '#a8b820'], kaefer: ['Käfer', '🐛', '#a8b820'],
+  rock: ['Gestein', '🪨', '#b8a038'], stein: ['Gestein', '🪨', '#b8a038'], gestein: ['Gestein', '🪨', '#b8a038'],
+  ghost: ['Geist', '👻', '#705898'],
+  dragon: ['Drache', '🐉', '#7038f8'],
+  dark: ['Unlicht', '🌑', '#705848'], unlicht: ['Unlicht', '🌑', '#705848'],
+  steel: ['Stahl', '⚙️', '#b8b8d0'], stahl: ['Stahl', '⚙️', '#b8b8d0'],
+  fairy: ['Fee', '🧚', '#ee99ac'], faerie: ['Fee', '🧚', '#ee99ac'],
+};
+
+function typeNameKey(v) {
+  return String(v).toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function getTypes(o) {
+  let t = o.type ?? o.types ?? o.pokemon_type ?? o.type_1 ?? (o.pokemon && o.pokemon.type) ?? null;
+  if (t == null) return [];
+  if (Array.isArray(t)) return t.map(typeNameKey).filter(Boolean);
+  if (typeof t === 'object') {
+    const inner = t.name
+      || (t.type && t.type.name)
+      || (Object.values(t)[0] && (Object.values(t)[0].name || (Object.values(t)[0].type && Object.values(t)[0].type.name)));
+    return inner ? [typeNameKey(inner)] : [];
+  }
+  // z. B. "Fire,Wasser" oder einzelner String
+  return String(t).split(/[\s,|/]+/).map(typeNameKey).filter(Boolean);
+}
+
+/* ---------- Sparkline (Accounts der letzten 24 h) ---------- */
+function updateSpark() {
+  if (!rateSparkEl) return;
+  const H = 24;
+  const buckets = new Array(H).fill(0);
+  const now = Date.now();
+  for (const e of allEntries) {
+    if (getChannel(e.entry) === '') continue;
+    const t = new Date(e.entry.time).getTime();
+    if (Number.isNaN(t)) continue;
+    const idx = Math.floor((now - t) / 3600e3);
+    if (idx >= 0 && idx < H) buckets[H - 1 - idx] += 1;
+  }
+  const max = Math.max(...buckets, 1);
+  const pts = buckets.map((v, i) => {
+    const x = (i / (H - 1)) * 100;
+    const y = 23 - (v / max) * 21;
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  rateSparkEl.innerHTML = '<polyline points="' + pts + '" fill="none" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
 }
 
 /* ---------- Ton, Toasts, Desktop-Hinweise, Konfetti ---------- */
@@ -441,8 +569,8 @@ function isErrorEvent(entry) {
   return false;
 }
 
-function chip(html, cls) {
-  return '<span class="chip' + (cls ? ' ' + cls : '') + '">' + html + '</span>';
+function chip(html, cls, style) {
+  return '<span class="chip' + (cls ? ' ' + cls : '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + html + '</span>';
 }
 
 function prettyPokemon(o) {
@@ -455,6 +583,18 @@ function prettyPokemon(o) {
   const form = o.form || (o.pokemon && o.pokemon.form) || null;
 
   const chips = [];
+
+  for (const tk of getTypes(o)) {
+    const meta = TYPES[tk];
+    if (meta) {
+      chips.push(
+        chip(meta[1] + ' ' + escapeHtml(meta[0]), 'type-chip',
+          'color:' + meta[2] + ';border-color:' + meta[2] + '88;background:' + meta[2] + '22')
+      );
+    } else if (tk) {
+      chips.push(chip(escapeHtml(tk)));
+    }
+  }
 
   const iv = getIv(o);
   if (iv != null) {
@@ -807,6 +947,7 @@ function updateEmptyState() {
 }
 
 function updateRate() {
+  updateSpark();
   const now = Date.now();
   const times = allEntries
     .filter((e) => getChannel(e.entry) !== '') // nur echte Bot-/Discord-Nachrichten, keine Tests
@@ -1165,6 +1306,7 @@ function connect() {
   es.onopen = () => {
     setStatus('online');
     loadHistory(); // bei (Re)Verbindung Verlauf nachziehen
+    fetchStatus(); // Uptime nach Deploy-Neustart aktualisieren
   };
   es.onerror = () => { setStatus('offline'); es.close(); setTimeout(connect, 2000); };
   es.onmessage = (e) => {
@@ -1174,5 +1316,14 @@ function connect() {
 
 loadHistory();
 connect();
+fetchStatus();
 setInterval(updateRate, 30000);
 setInterval(loadHistory, 20000); // Sicherheitsnetz: Verlauf regelmäßig abgleichen
+setInterval(updateUptime, 10000);
+setInterval(fetchStatus, 300000);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
