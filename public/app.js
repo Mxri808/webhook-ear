@@ -15,14 +15,20 @@ const tabAllBtn = document.getElementById('tabAll');
 const tabTopBtn = document.getElementById('tabTop');
 const tabCountAllEl = document.getElementById('tabCountAll');
 const tabCountTopEl = document.getElementById('tabCountTop');
+const subfiltersEl = document.getElementById('subfilters');
+const subAllEl = document.getElementById('subAll');
+const subOkEl = document.getElementById('subOk');
+const subErrEl = document.getElementById('subErr');
+const subBtns = Array.from(document.querySelectorAll('.subfilter'));
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
 urlInput.value = hookUrl;
 
 let activeTab = 'all';
+let subFilter = 'all'; // 'all' | 'ok' | 'err' (nur Tab Übersicht)
 const CHANNEL_TOP = 'catch-info';      // Webhook/Kanal für Top-Fänge
 const CHANNEL_SUMMARY = 'summerie';    // Webhook/Kanal für die Übersicht
-const allEntries = []; // { entry, scope: 'all' | 'top' | 'both' }
+const allEntries = []; // { entry, scope, error }
 const seenIds = new Set();
 
 function setStatus(state) {
@@ -129,6 +135,29 @@ function isTopCatch(entry) {
   if (/\bbackground\b/i.test(s)) return true;
   if (/\b100\s*%/.test(s)) return true;
   if (/\biv\b[^\d]{0,12}100(?!\d)/i.test(s)) return true;
+  return false;
+}
+
+/* ---------- Fehler-Erkennung ---------- */
+
+function isErrorEvent(entry) {
+  if (entry.type !== 'json' || entry.body == null) return false;
+  const b = entry.body;
+
+  if (typeof b === 'object' && !Array.isArray(b)) {
+    if (b.success === false || b.ok === false) return true;
+    if (b.status === 'error' || b.status === 'failed' || b.status === 'fail') return true;
+    if (b.error != null && b.error !== false && b.error !== '' ) return true;
+    const ev = getEventName(b);
+    if (/error|fail|exception|ban|crash|timeout|reject/.test(ev)) return true;
+  }
+
+  let s;
+  try { s = JSON.stringify(b); } catch { s = String(b); }
+  s = s.replace(/"(error|Error)"\s*:\s*(null|false|"")/g, '');
+
+  if (/"success"\s*:\s*false|"ok"\s*:\s*false|"status"\s*:\s*"(error|failed|fail)"/i.test(s)) return true;
+  if (/\berror\b|\bfailed\b|\bexception\b|\bbanned?\b|account (banned|disabled)/i.test(s)) return true;
   return false;
 }
 
@@ -317,10 +346,13 @@ function bodyHtml(entry) {
   return { kind: 'other', html: '<pre><i>Leerer Body</i></pre>', evBadge: '' };
 }
 
-function makeEventEl(entry) {
+function makeEventEl(item) {
+  const entry = item.entry;
   const el = document.createElement('div');
   el.className = 'event';
   el.dataset.id = entry.id;
+  if (item.scope === 'top') el.classList.add('e-top');
+  if (item.error) el.classList.add('e-error');
 
   const body = bodyHtml(entry);
   if (body && body.kind) el.classList.add('e-' + body.kind);
@@ -328,11 +360,18 @@ function makeEventEl(entry) {
     try { el.style.borderLeftColor = '#' + Number(body.embedColor).toString(16).padStart(6, '0'); } catch {}
   }
 
+  const statusBadge = item.error
+    ? '<span class="badge error">❌ Fehler</span>'
+    : item.scope === 'all'
+      ? '<span class="badge ok">✅ OK</span>'
+      : '';
+
   const head = document.createElement('div');
   head.className = 'event-head';
   const time = new Date(entry.time).toLocaleTimeString('de-DE');
   head.innerHTML =
     '<span class="badge ' + escapeHtml((entry.method || '').toLowerCase()) + '">' + escapeHtml(entry.method || '') + '</span>' +
+    statusBadge +
     (body.evBadge || '<span class="badge ' + escapeHtml(entry.type) + '">' + escapeHtml(entry.type) + '</span>') +
     '<span class="time">' + time + '</span>' +
     '<span class="id">#' + entry.id + '</span>';
@@ -363,22 +402,31 @@ function scopeOf(entry) {
   return isTopCatch(entry) ? 'both' : 'all';  // direkte Tests ohne Kanal
 }
 
-function showsInTab(scope) {
-  if (activeTab === 'all') return scope === 'all' || scope === 'both';
-  return scope === 'top' || scope === 'both';
+function showsInTab(scope, error) {
+  if (activeTab === 'top') return scope === 'top' || scope === 'both';
+  if (scope === 'top') return false;
+  if (subFilter === 'ok') return !error;
+  if (subFilter === 'err') return error;
+  return true;
 }
 
 function updateCounters() {
-  const total = allEntries.filter((e) => e.scope === 'all' || e.scope === 'both').length;
+  const overview = allEntries.filter((e) => e.scope === 'all' || e.scope === 'both');
   const top = allEntries.filter((e) => e.scope === 'top' || e.scope === 'both').length;
-  countEl.textContent = String(total);
+  const ok = overview.filter((e) => !e.error).length;
+  const err = overview.filter((e) => e.error).length;
+
+  countEl.textContent = String(overview.length);
   topCountEl.textContent = String(top);
-  tabCountAllEl.textContent = String(total);
+  tabCountAllEl.textContent = String(overview.length);
   tabCountTopEl.textContent = String(top);
+  subAllEl.textContent = String(overview.length);
+  subOkEl.textContent = String(ok);
+  subErrEl.textContent = String(err);
 }
 
 function updateEmptyState() {
-  const visible = allEntries.filter((e) => showsInTab(e.scope)).length;
+  const visible = allEntries.filter((e) => showsInTab(e.scope, e.error)).length;
   if (visible > 0) {
     emptyEl.classList.add('hidden');
     return;
@@ -387,6 +435,12 @@ function updateEmptyState() {
   if (activeTab === 'top') {
     emptyTitleEl.textContent = 'Noch keine Nachrichten aus #' + CHANNEL_TOP + '.';
     emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background landen automatisch hier.';
+  } else if (subFilter === 'err') {
+    emptyTitleEl.textContent = 'Keine Fehler — alles läuft! 🎉';
+    emptySubEl.textContent = 'Fehlerhafte Events würden hier rot erscheinen.';
+  } else if (subFilter === 'ok') {
+    emptyTitleEl.textContent = 'Noch keine erfolgreichen Events.';
+    emptySubEl.textContent = 'Nicht-Fehler aus #' + CHANNEL_SUMMARY + ' erscheinen hier.';
   } else {
     emptyTitleEl.textContent = 'Noch keine Events vom Bot empfangen.';
     emptySubEl.textContent = 'Alles aus #' + CHANNEL_SUMMARY + ' erscheint in dieser Übersicht.';
@@ -396,9 +450,8 @@ function updateEmptyState() {
 function rebuildList() {
   eventsEl.innerHTML = '';
   for (const item of allEntries) {
-    if (showsInTab(item.scope)) {
-      const el = makeEventEl(item.entry);
-      if (item.scope === 'top') el.classList.add('e-top');
+    if (showsInTab(item.scope, item.error)) {
+      const el = makeEventEl(item);
       eventsEl.prepend(el);
     }
   }
@@ -409,13 +462,15 @@ function addEntry(entry) {
   if (entry == null || entry.id == null || seenIds.has(entry.id)) return;
   seenIds.add(entry.id);
 
-  const scope = scopeOf(entry);
-  allEntries.push({ entry, scope });
+  const item = {
+    entry,
+    scope: scopeOf(entry),
+    error: isErrorEvent(entry),
+  };
+  allEntries.push(item);
 
-  if (showsInTab(scope)) {
-    const el = makeEventEl(entry);
-    if (scope === 'top') el.classList.add('e-top');
-    eventsEl.prepend(el);
+  if (showsInTab(item.scope, item.error)) {
+    eventsEl.prepend(makeEventEl(item));
   }
 
   updateCounters();
@@ -428,11 +483,20 @@ function switchTab(tab) {
   activeTab = tab;
   tabAllBtn.classList.toggle('active', tab === 'all');
   tabTopBtn.classList.toggle('active', tab === 'top');
+  subfiltersEl.style.display = tab === 'all' ? '' : 'none';
   rebuildList();
 }
 
 tabAllBtn.addEventListener('click', () => switchTab('all'));
 tabTopBtn.addEventListener('click', () => switchTab('top'));
+
+function setSubFilter(sub) {
+  subFilter = sub;
+  subBtns.forEach((b) => b.classList.toggle('active', b.dataset.sub === sub));
+  rebuildList();
+}
+
+subBtns.forEach((b) => b.addEventListener('click', () => setSubFilter(b.dataset.sub)));
 
 function clearList() {
   allEntries.length = 0;
