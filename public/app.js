@@ -606,7 +606,10 @@ function loadHistory() {
 
 function connect() {
   const es = new EventSource('/events');
-  es.onopen = () => setStatus('online');
+  es.onopen = () => {
+    setStatus('online');
+    loadHistory(); // bei (Re)Verbindung Verlauf nachziehen
+  };
   es.onerror = () => { setStatus('offline'); es.close(); setTimeout(connect, 2000); };
   es.onmessage = (e) => {
     try { addEntry(JSON.parse(e.data)); } catch {}
@@ -616,3 +619,4 @@ function connect() {
 loadHistory();
 connect();
 setInterval(updateRate, 30000);
+setInterval(loadHistory, 20000); // Sicherheitsnetz: Verlauf regelmäßig abgleichen

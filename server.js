@@ -16,6 +16,7 @@ const BACKFILL_CHANNELS = ['summerie', 'catch-info'];
 const messages = [];
 const clients = new Set();
 let messageId = 0;
+let backfillPromise = null;
 
 function readClearedAt() {
   try {
@@ -220,7 +221,7 @@ function startDiscordBridge() {
     client.once('ready', () => {
       console.log('Discord-Brücke online als', client.user.tag,
         channelId ? '(Kanal-Filter: ' + channelId + ')' : '(alle Kanäle)');
-      backfillFromDiscord(client, channelId).catch((err) => {
+      backfillPromise = backfillFromDiscord(client, channelId).catch((err) => {
         console.error('Backfill Fehler:', err.message);
       });
     });
@@ -274,6 +275,9 @@ const server = createServer(async (req, res) => {
   }
 
   if (p === '/api/messages' && req.method === 'GET') {
+    if (backfillPromise) {
+      try { await backfillPromise; } catch { /* Fehler egal, Rest zeigen */ }
+    }
     json(res, 200, { messages });
     return;
   }
