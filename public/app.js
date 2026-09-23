@@ -110,28 +110,64 @@ function classifyKind(ev) {
 
 /* ---------- Top-Fang-Erkennung (shiny / hundo / background) ---------- */
 
+const TOP_RE = /\bhundo\b|\bperfect\b|\bshiny\b|\bbackground\b|\b100\s*%|✨|💯|🏞️/i;
+
+// Statistik-Zeilen entfernen, z. B. "**Shiny Pokemon caught:** 0"
+// (Zahlen ≠ Fang — sonst landen Reports fälschlich in Top-Fänge)
+function stripStats(text) {
+  return String(text || '')
+    .split('\n')
+    .filter((line) => {
+      if (/pokemon caught\s*[::]/i.test(line)) return false;
+      if (/\bcaught\s*[::]\s*\d/i.test(line)) return false;
+      return true;
+    })
+    .join('\n');
+}
+
 function isTopCatch(entry) {
   if (entry.type !== 'json' || entry.body == null) return false;
   const b = entry.body;
 
   if (typeof b === 'object' && !Array.isArray(b)) {
+    // 1) Strukturierte Flags — zuverlässigste Quelle
     const iv = getIv(b);
     if (iv != null && Number(iv) >= 100) return true;
     if (b.shiny === true || b.is_shiny === true || b.shiny === 1) return true;
     if (b.background === true || b.has_background === true || b.is_background === true) return true;
     if (typeof b.background === 'string' && b.background) return true;
     if (b.pokemon_background || b.location_background) return true;
+
+    // 2) Discord-Embeds: Titel/Beschreibung/Felder prüfen (ohne Statistik-Zeilen)
+    if (looksLikeDiscord(b)) {
+      if (b.content && TOP_RE.test(stripStats(b.content))) return true;
+      const embeds = Array.isArray(b.embeds) ? b.embeds : [];
+      for (const emb of embeds) {
+        if (!emb) continue;
+        if (TOP_RE.test(stripStats(emb.title))) return true;
+        if (TOP_RE.test(stripStats(emb.description))) return true;
+        for (const f of Array.isArray(emb.fields) ? emb.fields : []) {
+          const name = String((f && f.name) || '');
+          const value = String((f && f.value) || '');
+          // Zähler (z. B. "Shiny Pokemon caught: 5") nicht als Fang werten
+          if (/caught|count|collected|visited|encounters/i.test(name) && /^\s*\d/.test(value)) continue;
+          if (TOP_RE.test(stripStats(name + ' ' + value))) return true;
+        }
+      }
+      return false;
+    }
+
+    // 3) Sonstige JSON-Texte: falsche Flags (shiny:false etc.) vorher entfernen
+    let s;
+    try { s = JSON.stringify(b); } catch { s = String(b); }
+    s = s.replace(/"(shiny|is_shiny|has_background|is_background|background)"\s*[::]\s*(false|null|0(?!\d)|"[^"]*")/gi, ' ');
+    return TOP_RE.test(stripStats(s));
   }
 
+  // Text-/Form-Body
   let s;
   try { s = JSON.stringify(b); } catch { s = String(b); }
-
-  if (/\bhundo\b|\bperfect\b/i.test(s)) return true;
-  if (/\bshiny\b|✨/i.test(s)) return true;
-  if (/\bbackground\b/i.test(s)) return true;
-  if (/\b100\s*%/.test(s)) return true;
-  if (/\biv\b[^\d]{0,12}100(?!\d)/i.test(s)) return true;
-  return false;
+  return TOP_RE.test(stripStats(s));
 }
 
 /* ---------- Fehler-Erkennung ---------- */
