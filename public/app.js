@@ -252,6 +252,19 @@ function looksLikeDiscord(o) {
   return o.source === 'discord' || Array.isArray(o.embeds);
 }
 
+function renderMd(text) {
+  let s = escapeHtml(String(text));
+  s = s.replace(/```([\s\S]*?)```/g, '<code>$1</code>');
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  s = s.replace(/\*([^*\n]+)\*/g, '<i>$1</i>');
+  s = s.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+  s = s.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="spoiler">$1</span>');
+  s = s.replace(/__(.+?)__/g, '<u>$1</u>');
+  s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+
 function ivClassFor(name, value) {
   if (!/iv/i.test(name)) return '';
   const m = String(value).replace(',', '.').match(/(\d+(?:\.\d+)?)\s*%?/);
@@ -267,15 +280,15 @@ function ivClassFor(name, value) {
 function prettyDiscord(o) {
   const parts = [];
 
-  if (o.author || o.content || o.channel) {
-    const metaBits = [];
-    if (o.author) metaBits.push('🤖 ' + escapeHtml(o.author));
-    if (o.channel) metaBits.push('#' + escapeHtml(o.channel));
-    if (metaBits.length) parts.push('<div class="poke-sub" style="margin-bottom:8px">' + metaBits.join(' · ') + '</div>');
+  if (o.author || o.channel) {
+    const bits = [];
+    if (o.author) bits.push('<span class="author-name">🤖 ' + escapeHtml(o.author) + '</span>');
+    if (o.channel) bits.push('<span class="channel-pill">#' + escapeHtml(o.channel) + '</span>');
+    parts.push('<div class="author-line">' + bits.join('') + '</div>');
   }
 
   if (o.content) {
-    parts.push('<div class="poke-title"><span class="poke-name">' + escapeHtml(o.content) + '</span></div>');
+    parts.push('<div class="embed-content">' + renderMd(o.content) + '</div>');
   }
 
   const embeds = o.embeds || [];
@@ -283,32 +296,38 @@ function prettyDiscord(o) {
 
   for (const e of embeds) {
     if (e.color != null && embedColor == null) embedColor = e.color;
+    const ec = e.color != null ? '#' + Number(e.color).toString(16).padStart(6, '0') : null;
+
+    if (e.thumbnail) {
+      parts.push('<img class="embed-thumb" src="' + escapeHtml(e.thumbnail) + '" alt="" loading="lazy">');
+    }
 
     if (e.title) {
       const t = e.url
-        ? '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><span class="poke-name">' + escapeHtml(e.title) + '</span></a>'
-        : '<span class="poke-name">' + escapeHtml(e.title) + '</span>';
+        ? '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><span class="poke-name">' + renderMd(e.title) + '</span></a>'
+        : '<span class="poke-name">' + renderMd(e.title) + '</span>';
       parts.push('<div class="poke-title">' + t + '</div>');
     }
 
     if (e.description) {
-      const ec = e.color != null ? '#' + Number(e.color).toString(16).padStart(6, '0') : null;
-      parts.push('<div class="embed-desc"' + (ec ? ' style="border-left-color:' + ec + '"' : '') + '>' + escapeHtml(e.description) + '</div>');
+      parts.push('<div class="embed-desc"' + (ec ? ' style="border-left-color:' + ec + '"' : '') + '>' + renderMd(e.description) + '</div>');
     }
 
     const chips = [];
 
     for (const f of e.fields || []) {
       const cls = ivClassFor(f.name, f.value);
-      chips.push(chip('<span class="lbl">' + escapeHtml(f.name) + '</span> <b>' + escapeHtml(f.value) + '</b>', cls));
+      chips.push(chip('<span class="lbl">' + renderMd(f.name) + '</span> <b>' + renderMd(f.value) + '</b>', cls));
     }
 
-    if (e.footer) chips.push(chip(escapeHtml(e.footer)));
+    if (e.footer) chips.push(chip(renderMd(e.footer)));
     if (e.timestamp) chips.push(chip('🕐 ' + new Date(e.timestamp).toLocaleString('de-DE')));
-    if (e.thumbnail) chips.push(chip('🖼️ <a href="' + escapeHtml(e.thumbnail) + '" target="_blank" rel="noopener">Vorschaubild</a>'));
-    if (e.image) chips.push(chip('🖼️ <a href="' + escapeHtml(e.image) + '" target="_blank" rel="noopener">Bild</a>'));
 
     if (chips.length) parts.push('<div class="chips">' + chips.join('') + '</div>');
+
+    if (e.image) {
+      parts.push('<img class="embed-img" src="' + escapeHtml(e.image) + '" alt="" loading="lazy">');
+    }
   }
 
   if (parts.length === 0) return null;
@@ -370,10 +389,13 @@ function makeEventEl(item) {
   const head = document.createElement('div');
   head.className = 'event-head';
   const time = new Date(entry.time).toLocaleTimeString('de-DE');
+  const typeBadge = '<span class="badge ' + escapeHtml(entry.type) + '">' + escapeHtml(entry.type) + '</span>';
+  const evBadge = (entry.method === 'DISCORD' && body.evBadge) ? '' : (body.evBadge || typeBadge);
+
   head.innerHTML =
     '<span class="badge ' + escapeHtml((entry.method || '').toLowerCase()) + '">' + escapeHtml(entry.method || '') + '</span>' +
     statusBadge +
-    (body.evBadge || '<span class="badge ' + escapeHtml(entry.type) + '">' + escapeHtml(entry.type) + '</span>') +
+    evBadge +
     '<span class="event-meta"><span class="time">' + time + '</span>' +
     '<span class="id">#' + entry.id + '</span></span>';
 
