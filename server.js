@@ -11,8 +11,6 @@ const CLEARED_FILE = path.join(__dirname, '.cleared.json');
 
 const MAX_MESSAGES = 5000;
 const MAX_BODY = 1024 * 1024;
-const BACKFILL_CHANNELS = ['summerie', 'catch-info'];
-
 const messages = [];
 const clients = new Set();
 let messageId = 0;
@@ -175,10 +173,10 @@ async function backfillFromDiscord(client, channelId) {
     const ch = await client.channels.fetch(channelId).catch(() => null);
     if (ch) channels.push(ch);
   } else {
+    // Alle Text-Kanäle (egal wie sie heißen) – dort stehen die Webhook-Nachrichten
+    const TEXT_TYPES = new Set([0, 5]); // GuildText, GuildAnnouncement
     client.channels.cache.forEach((ch) => {
-      if (ch.isTextBased && ch.isTextBased() && BACKFILL_CHANNELS.includes(ch.name)) {
-        channels.push(ch);
-      }
+      if (TEXT_TYPES.has(ch.type)) channels.push(ch);
     });
   }
 

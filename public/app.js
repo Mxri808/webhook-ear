@@ -24,8 +24,6 @@ const hookUrl = new URL('/hook', window.location.origin).toString();
 
 let activeTab = 'all';
 let subFilter = 'all'; // 'all' | 'ok' | 'err' (nur Tab Übersicht)
-const CHANNEL_TOP = 'catch-info';      // Webhook/Kanal für Top-Fänge
-const CHANNEL_SUMMARY = 'summerie';    // Webhook/Kanal für die Übersicht
 const allEntries = []; // { entry, scope, error }
 const seenIds = new Set();
 
@@ -369,7 +367,7 @@ function makeEventEl(item) {
   const el = document.createElement('div');
   el.className = 'event';
   el.dataset.id = entry.id;
-  if (item.scope === 'top') el.classList.add('e-top');
+  if (item.scope !== 'all') el.classList.add('e-top');
   if (item.error) el.classList.add('e-error');
 
   const body = bodyHtml(entry);
@@ -380,9 +378,7 @@ function makeEventEl(item) {
 
   const statusBadge = item.error
     ? '<span class="badge error">❌ Fehler</span>'
-    : item.scope === 'all'
-      ? '<span class="badge ok">✅ OK</span>'
-      : '';
+    : '<span class="badge ok">✅ OK</span>';
 
   const head = document.createElement('div');
   head.className = 'event-head';
@@ -419,10 +415,8 @@ function getChannel(entry) {
 }
 
 function scopeOf(entry) {
-  const ch = getChannel(entry);
-  if (ch === CHANNEL_TOP) return 'top';       // nur im Tab Top-Fänge
-  if (ch === CHANNEL_SUMMARY) return 'all';   // nur im Tab Übersicht
-  return isTopCatch(entry) ? 'both' : 'all';  // direkte Tests ohne Kanal
+  // Ein Webhook für alles: Top-Fänge landen in BEIDEN Tabs, Rest nur in der Übersicht
+  return isTopCatch(entry) ? 'both' : 'all';
 }
 
 function showsInTab(scope, error) {
@@ -456,24 +450,24 @@ function updateEmptyState() {
   }
   emptyEl.classList.remove('hidden');
   if (activeTab === 'top') {
-    emptyTitleEl.textContent = 'Noch keine Nachrichten aus #' + CHANNEL_TOP + '.';
+    emptyTitleEl.textContent = 'Noch keine Top-Fänge.';
     emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background landen automatisch hier.';
   } else if (subFilter === 'err') {
     emptyTitleEl.textContent = 'Keine Fehler — alles läuft! 🎉';
     emptySubEl.textContent = 'Fehlerhafte Events würden hier rot erscheinen.';
   } else if (subFilter === 'ok') {
     emptyTitleEl.textContent = 'Noch keine erfolgreichen Events.';
-    emptySubEl.textContent = 'Nicht-Fehler aus #' + CHANNEL_SUMMARY + ' erscheinen hier.';
+    emptySubEl.textContent = 'Nicht-Fehler erscheinen hier.';
   } else {
     emptyTitleEl.textContent = 'Noch keine Events vom Bot empfangen.';
-    emptySubEl.textContent = 'Alles aus #' + CHANNEL_SUMMARY + ' erscheint in dieser Übersicht.';
+    emptySubEl.textContent = 'Alles, was der Bot schickt, erscheint in dieser Übersicht.';
   }
 }
 
 function updateRate() {
   const now = Date.now();
   const times = allEntries
-    .filter((e) => getChannel(e.entry) === CHANNEL_SUMMARY) // nur Übersicht-Webhook (#summerie)
+    .filter((e) => getChannel(e.entry) !== '') // nur echte Bot-/Discord-Nachrichten, keine Tests
     .map((e) => new Date(e.entry.time).getTime())
     .filter((t) => !Number.isNaN(t))
     .sort((a, b) => a - b);
