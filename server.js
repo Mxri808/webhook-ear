@@ -208,6 +208,17 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (p === '/api/messages' && req.method === 'GET') {
+    json(res, 200, { messages });
+    return;
+  }
+
+  if (p === '/api/messages' && req.method === 'DELETE') {
+    messages.length = 0;
+    json(res, 200, { ok: true });
+    return;
+  }
+
   if (p === '/hook') {
     if (req.method === 'POST') {
       try {

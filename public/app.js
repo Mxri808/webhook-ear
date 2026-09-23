@@ -290,6 +290,8 @@ function bodyHtml(entry) {
 }
 
 function render(entry) {
+  if (entry && entry.id != null && eventsEl.querySelector('[data-id="' + entry.id + '"]')) return;
+
   const el = document.createElement('div');
   el.className = 'event';
   el.dataset.id = entry.id;
@@ -332,6 +334,7 @@ function clearList() {
   count = 0;
   countEl.textContent = '0';
   emptyEl.classList.remove('hidden');
+  fetch('/api/messages', { method: 'DELETE' }).catch(() => {});
 }
 
 copyBtn.addEventListener('click', async () => {
@@ -366,6 +369,15 @@ testBtn.addEventListener('click', async () => {
 
 clearBtn.addEventListener('click', clearList);
 
+function loadHistory() {
+  fetch('/api/messages')
+    .then((r) => r.json())
+    .then((d) => {
+      (d.messages || []).forEach((m) => render(m));
+    })
+    .catch(() => {});
+}
+
 function connect() {
   const es = new EventSource('/events');
   es.onopen = () => setStatus('online');
@@ -375,4 +387,5 @@ function connect() {
   };
 }
 
+loadHistory();
 connect();
