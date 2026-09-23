@@ -11,11 +11,30 @@ const CLEARED_FILE = path.join(__dirname, '.cleared.json');
 
 const MAX_MESSAGES = 5000;
 const MAX_BODY = 1024 * 1024;
+const STARTED_AT = Date.now();
+const WEBHOOK_TOKEN = process.env.WEBHOOK_TOKEN || '';
 const messages = [];
 const clients = new Set();
 let messageId = 0;
 let resolveBackfill = () => {};
 const backfillPromise = new Promise((r) => { resolveBackfill = r; });
+
+/* ---------- Rate-Limit für /hook (Spam-Schutz) ---------- */
+const rateBuckets = new Map(); // ip -> [timestamps]
+const RATE_LIMIT = 120; // max. Anfragen pro Minute und IP
+
+function rateLimited(ip) {
+  const now = Date.now();
+  const arr = (rateBuckets.get(ip) || []).filter((t) => now - t < 60000);
+  arr.push(now);
+  rateBuckets.set(ip, arr);
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (v.every((t) => now - t >= 60000)) rateBuckets.delete(k);
+    }
+  }
+  return arr.length > RATE_LIMIT;
+}
 
 function readClearedAt() {
   try {
@@ -296,6 +315,19 @@ const server = createServer(async (req, res) => {
 
   if (p === '/hook') {
     if (req.method === 'POST') {
+      // Optionaler Secret-Schutz: erst aktiv, wenn WEBHOOK_TOKEN in Render gesetzt ist
+      if (WEBHOOK_TOKEN) {
+        const given = url.searchParams.get('token') || req.headers['x-webhook-token'] || '';
+        if (given !== WEBHOOK_TOKEN) {
+          json(res, 401, { ok: false, error: 'Ungültiger oder fehlender token' });
+          return;
+        }
+      }
+      const ip = req.socket.remoteAddress || 'unknown';
+      if (rateLimited(ip)) {
+        json(res, 429, { ok: false, error: 'Zu viele Anfragen – später nochmal' });
+        return;
+      }
       try {
         const raw = await readBody(req);
         const entry = {
@@ -316,6 +348,17 @@ const server = createServer(async (req, res) => {
       json(res, 200, { ok: true, hint: 'Diese URL erwartet POST-Anfragen von deinem Webhook-Dienst.' });
       return;
     }
+  }
+
+  if (p === '/api/status' && req.method === 'GET') {
+    json(res, 200, {
+      ok: true,
+      startedAt: new Date(STARTED_AT).toISOString(),
+      messages: messages.length,
+      max: MAX_MESSAGES,
+      tokenRequired: Boolean(WEBHOOK_TOKEN),
+    });
+    return;
   }
 
   if (req.method === 'GET') {

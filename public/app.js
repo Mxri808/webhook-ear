@@ -19,13 +19,30 @@ const subAllEl = document.getElementById('subAll');
 const subOkEl = document.getElementById('subOk');
 const subErrEl = document.getElementById('subErr');
 const subStoppedEl = document.getElementById('subStopped');
+const searchEl = document.getElementById('search');
+const searchClearEl = document.getElementById('searchClear');
+const searchInfoEl = document.getElementById('searchInfo');
+const showMoreWrap = document.getElementById('showMoreWrap');
+const showMoreBtn = document.getElementById('showMore');
+const exportJsonBtn = document.getElementById('exportJson');
+const exportCsvBtn = document.getElementById('exportCsv');
+const modalEl = document.getElementById('modal');
+const modalBackdrop = document.getElementById('modalBackdrop');
+const modalCloseBtn = document.getElementById('modalClose');
+const modalBadgesEl = document.getElementById('modalBadges');
+const modalContentEl = document.getElementById('modalContent');
+const modalStarsEl = document.getElementById('modalStars');
+const modalJsonEl = document.getElementById('modalJson');
 const subBtns = Array.from(document.querySelectorAll('.subfilter'));
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
 
 let activeTab = 'all';
-let subFilter = 'all'; // 'all' | 'ok' | 'err' (nur Tab Übersicht)
-const allEntries = []; // { entry, scope, error }
+let subFilter = 'all'; // 'all' | 'ok' | 'err' | 'stopped' (nur Tab Übersicht)
+let searchQuery = '';
+let renderLimit = 100; // Performance: nur die letzten N Karten im DOM
+let booted = false; // erst true, wenn der erste Verlauf geladen ist
+const allEntries = []; // { entry, scope, error, stopped, _hay }
 const seenIds = new Set();
 
 function setStatus(state) {
@@ -483,18 +500,49 @@ function getChannel(entry) {
   return '';
 }
 
+function findPinnedItem() { return null; } // wird in Etappe 2 mit Favoriten gefüllt
+
 function scopeOf(entry) {
   // Ein Webhook für alles: Top-Fänge landen in BEIDEN Tabs, Rest nur in der Übersicht
   return isTopCatch(entry) ? 'both' : 'all';
 }
 
-function showsInTab(scope, error, stopped) {
-  if (activeTab === 'top') return scope === 'top' || scope === 'both';
-  if (scope === 'top') return false;
-  if (subFilter === 'ok') return !error && !stopped;
-  if (subFilter === 'err') return error;
-  if (subFilter === 'stopped') return stopped;
+function haystack(entry) {
+  let body = '';
+  try { body = JSON.stringify(entry.body ?? null); } catch { body = String(entry.body ?? ''); }
+  return ((entry.method || '') + ' ' + (entry.type || '') + ' ' + body).toLowerCase();
+}
+
+function showsInTab(item) {
+  const scope = item.scope;
+  if (activeTab === 'top') {
+    if (scope !== 'top' && scope !== 'both') return false;
+  } else {
+    if (scope === 'top') return false;
+    if (subFilter === 'ok' && (item.error || item.stopped)) return false;
+    if (subFilter === 'err' && !item.error) return false;
+    if (subFilter === 'stopped' && !item.stopped) return false;
+  }
+  if (searchQuery && !(item._hay || '').includes(searchQuery)) return false;
   return true;
+}
+
+function refreshListChrome() {
+  const matching = allEntries.filter(showsInTab).length;
+  const rendered = eventsEl.children.length;
+  const remaining = matching - rendered;
+  showMoreWrap.classList.toggle('hidden', remaining <= 0);
+  if (remaining > 0) {
+    showMoreBtn.textContent = 'Zeige ' + Math.min(remaining, renderLimit) + ' weitere · ' + remaining + ' mehr vorhanden';
+  }
+  if (searchQuery) {
+    searchInfoEl.textContent = matching + (matching === 1 ? ' Treffer' : ' Treffer');
+    searchInfoEl.classList.remove('hidden');
+    searchClearEl.classList.remove('hidden');
+  } else {
+    searchInfoEl.classList.add('hidden');
+    searchClearEl.classList.add('hidden');
+  }
 }
 
 function updateCounters() {
@@ -515,13 +563,16 @@ function updateCounters() {
 }
 
 function updateEmptyState() {
-  const visible = allEntries.filter((e) => showsInTab(e.scope, e.error, e.stopped)).length;
+  const visible = allEntries.filter(showsInTab).length;
   if (visible > 0) {
     emptyEl.classList.add('hidden');
     return;
   }
   emptyEl.classList.remove('hidden');
-  if (activeTab === 'top') {
+  if (searchQuery) {
+    emptyTitleEl.textContent = 'Keine Treffer.';
+    emptySubEl.textContent = 'Für „' + searchEl.value.trim() + '" wurde nichts gefunden.';
+  } else if (activeTab === 'top') {
     emptyTitleEl.textContent = 'Noch keine Top-Fänge.';
     emptySubEl.textContent = '✨ Shiny, 💯 Hundos und 🏞️ Background landen automatisch hier.';
   } else if (subFilter === 'stopped') {
@@ -576,13 +627,13 @@ function updateRate() {
 }
 
 function rebuildList() {
+  const matching = allEntries.filter(showsInTab);
+  const shown = matching.slice(-renderLimit);
   eventsEl.innerHTML = '';
-  for (const item of allEntries) {
-    if (showsInTab(item.scope, item.error, item.stopped)) {
-      const el = makeEventEl(item);
-      eventsEl.prepend(el);
-    }
+  for (const item of shown) {
+    eventsEl.prepend(makeEventEl(item));
   }
+  refreshListChrome();
   updateEmptyState();
 }
 
@@ -595,17 +646,21 @@ function addEntry(entry) {
     scope: scopeOf(entry),
     error: isErrorEvent(entry),
     stopped: isStoppedEvent(entry),
+    _hay: haystack(entry),
   };
   allEntries.push(item);
 
-  if (showsInTab(item.scope, item.error, item.stopped)) {
-    eventsEl.prepend(makeEventEl(item));
+  if (showsInTab(item)) {
+    if (eventsEl.children.length >= renderLimit) rebuildList();
+    else eventsEl.prepend(makeEventEl(item));
+    refreshListChrome();
   }
 
   updateCounters();
   updateRate();
   lastTimeEl.textContent = new Date(entry.time).toLocaleTimeString('de-DE');
   updateEmptyState();
+  afterEntryAdded(item);
 }
 
 function switchTab(tab) {
@@ -619,6 +674,148 @@ function switchTab(tab) {
 
 tabAllBtn.addEventListener('click', () => switchTab('all'));
 tabTopBtn.addEventListener('click', () => switchTab('top'));
+
+/* ---------- Suche ---------- */
+let searchDebounce = null;
+
+function applySearch(resetLimit) {
+  searchQuery = searchEl.value.trim().toLowerCase();
+  if (resetLimit) renderLimit = 100;
+  rebuildList();
+}
+
+searchEl.addEventListener('input', () => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => applySearch(true), 150);
+});
+searchClearEl.addEventListener('click', () => {
+  searchEl.value = '';
+  applySearch(true);
+  searchEl.focus();
+});
+
+showMoreBtn.addEventListener('click', () => {
+  renderLimit += 400;
+  rebuildList();
+});
+
+/* ---------- Export ---------- */
+function downloadBlob(filename, mime, text) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function fileStamp() {
+  return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+}
+
+function titleFor(entry) {
+  const b = entry.body;
+  if (b && typeof b === 'object') {
+    if (Array.isArray(b.embeds) && b.embeds[0] && b.embeds[0].title) return String(b.embeds[0].title);
+    const n = b.pokemon_name || b.pokemonName || b.name;
+    if (n) return String(n);
+    if (b.content) return String(b.content).slice(0, 120);
+    if (b.event) return String(b.event);
+  }
+  return String(b ?? '').slice(0, 120);
+}
+
+function exportJson() {
+  const data = allEntries.map((e) => e.entry);
+  downloadBlob('poke-ear-' + fileStamp() + '.json', 'application/json', JSON.stringify(data, null, 2));
+}
+
+function exportCsv() {
+  const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const cols = ['id', 'zeit', 'methode', 'typ', 'status', 'top', 'kanal', 'titel', 'roh'];
+  const rows = [cols.map(esc).join(';')];
+  for (const item of allEntries) {
+    const e = item.entry;
+    rows.push([
+      e.id,
+      e.time,
+      e.method,
+      e.type,
+      item.error ? 'Fehler' : item.stopped ? 'Stopped' : 'OK',
+      item.scope !== 'all' ? 'ja' : '',
+      getChannel(e),
+      titleFor(e),
+      JSON.stringify(e.body ?? ''),
+    ].map(esc).join(';'));
+  }
+  downloadBlob('poke-ear-' + fileStamp() + '.csv', 'text/csv;charset=utf-8', '\uFEFF' + rows.join('\n'));
+}
+
+exportJsonBtn.addEventListener('click', exportJson);
+exportCsvBtn.addEventListener('click', exportCsv);
+
+/* ---------- Detail-Modal ---------- */
+let currentModalItem = null;
+
+function openModal(item) {
+  if (!item) return;
+  currentModalItem = item;
+  const entry = item.entry;
+  const body = bodyHtml(entry);
+
+  const statusBadge = item.error
+    ? '<span class="badge error">❌ Fehler</span>'
+    : item.stopped
+      ? '<span class="badge paused">⏸ Stopped</span>'
+      : '<span class="badge ok">✅ OK</span>';
+  const typeBadge = '<span class="badge ' + escapeHtml(entry.type) + '">' + escapeHtml(entry.type) + '</span>';
+  const evBadge = (entry.method === 'DISCORD' && body.evBadge) ? '' : (body.evBadge || typeBadge);
+
+  modalBadgesEl.innerHTML =
+    '<span class="badge ' + escapeHtml((entry.method || '').toLowerCase()) + '">' + escapeHtml(entry.method || '') + '</span>' +
+    statusBadge +
+    evBadge +
+    '<span class="badge text">📅 ' + new Date(entry.time).toLocaleString('de-DE') + '</span>' +
+    '<span class="badge text">#' + entry.id + '</span>';
+
+  modalContentEl.innerHTML = body.html;
+  modalJsonEl.innerHTML = highlightJson(entry.body);
+  modalStarsEl.innerHTML = '';
+  modalEl.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  modalEl.classList.add('hidden');
+  document.body.style.overflow = '';
+  currentModalItem = null;
+}
+
+function itemById(id) {
+  return allEntries.find((e) => e.entry.id === id) || findPinnedItem(id) || null;
+}
+
+eventsEl.addEventListener('click', (ev) => {
+  if (ev.target.closest('a, button, .mini-stars')) return;
+  const card = ev.target.closest('.event');
+  if (!card) return;
+  const id = Number(card.dataset.id);
+  if (!Number.isNaN(id)) openModal(itemById(id));
+});
+
+modalCloseBtn.addEventListener('click', closeModal);
+modalBackdrop.addEventListener('click', closeModal);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !modalEl.classList.contains('hidden')) closeModal();
+});
+
+/* ---------- Nach jedem neuen Eintrag (Hooks für Etappe 2) ---------- */
+function afterEntryAdded(item) {
+  // Toast / Sound / Konfetti werden in Etappe 2 verdrahtet
+}
 
 function setSubFilter(sub) {
   subFilter = sub;
@@ -666,12 +863,17 @@ testBtn.addEventListener('click', async () => {
 clearBtn.addEventListener('click', clearList);
 
 function loadHistory() {
-  fetch('/api/messages')
+  return fetch('/api/messages')
     .then((r) => r.json())
     .then((d) => {
       (d.messages || []).forEach((m) => addEntry(m));
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+      booted = true;
+      updateEmptyState();
+      refreshListChrome();
+    });
 }
 
 function connect() {
