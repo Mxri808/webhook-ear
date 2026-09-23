@@ -28,6 +28,8 @@
       </div>
       <div class="top-right">
         <span id="status" class="status">Verbinde …</span>
+        <button id="soundToggle" class="icon-btn" title="Ton an/aus (Top-Fang & Fehler)">🔊</button>
+        <button id="notifToggle" class="icon-btn" title="Desktop-Hinweise, auch im Hintergrund">🔕</button>
         <span class="pill">Bot Webhook</span>
       </div>
     </div>
@@ -102,7 +104,11 @@
         <button class="subfilter paused" data-sub="stopped">⏸ Stopped/Pause <span class="sub-count" id="subStopped">0</span></button>
       </div>
 
-      <div id="events" class="events"></div>
+      <div id="events" class="events">
+        <div class="skeleton-card skeleton" aria-hidden="true"></div>
+        <div class="skeleton-card skeleton" aria-hidden="true"></div>
+        <div class="skeleton-card skeleton" aria-hidden="true"></div>
+      </div>
       <div id="showMoreWrap" class="show-more hidden">
         <button id="showMore" class="btn ghost small">…</button>
       </div>
@@ -120,6 +126,8 @@
       <span class="dim">Bot sendet an <code>/hook</code> · Events live über <code>/events</code></span>
     </div>
   </footer>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-backdrop" id="modalBackdrop"></div>

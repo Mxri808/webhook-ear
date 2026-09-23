@@ -33,6 +33,9 @@ const modalBadgesEl = document.getElementById('modalBadges');
 const modalContentEl = document.getElementById('modalContent');
 const modalStarsEl = document.getElementById('modalStars');
 const modalJsonEl = document.getElementById('modalJson');
+const soundToggleEl = document.getElementById('soundToggle');
+const notifToggleEl = document.getElementById('notifToggle');
+const toastsEl = document.getElementById('toasts');
 const subBtns = Array.from(document.querySelectorAll('.subfilter'));
 
 const hookUrl = new URL('/hook', window.location.origin).toString();
@@ -44,6 +47,204 @@ let renderLimit = 100; // Performance: nur die letzten N Karten im DOM
 let booted = false; // erst true, wenn der erste Verlauf geladen ist
 const allEntries = []; // { entry, scope, error, stopped, _hay }
 const seenIds = new Set();
+
+/* ---------- Persistenz: Sterne & Favoriten ---------- */
+const keyCache = new WeakMap();
+
+function entryKey(entry) {
+  if (!entry || typeof entry !== 'object') return 'x';
+  if (keyCache.has(entry)) return keyCache.get(entry);
+  let body = '';
+  try { body = JSON.stringify(entry.body ?? null); } catch { body = String(entry.body ?? ''); }
+  const s = (entry.time || '') + '|' + (entry.method || '') + '|' + body;
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  const key = (entry.time || '') + '-' + (h >>> 0).toString(36);
+  keyCache.set(entry, key);
+  return key;
+}
+
+let starsCache = null;
+function starsMap() {
+  if (!starsCache) {
+    try { starsCache = JSON.parse(localStorage.getItem('pe_stars') || '{}'); }
+    catch { starsCache = {}; }
+    if (!starsCache || typeof starsCache !== 'object') starsCache = {};
+  }
+  return starsCache;
+}
+function getStars(entry) {
+  return Number(starsMap()[entryKey(entry)] || 0);
+}
+function setStars(entry, n) {
+  const m = starsMap();
+  const k = entryKey(entry);
+  if (!n || n <= 0) delete m[k];
+  else m[k] = Math.max(1, Math.min(5, n));
+  try { localStorage.setItem('pe_stars', JSON.stringify(m)); } catch {}
+}
+
+let pinsCache = null;
+function pinsList() {
+  if (!pinsCache) {
+    try { const a = JSON.parse(localStorage.getItem('pe_pins') || '[]'); pinsCache = Array.isArray(a) ? a : []; }
+    catch { pinsCache = []; }
+  }
+  return pinsCache;
+}
+function savePinsList(arr) {
+  pinsCache = arr.slice(0, 50);
+  try { localStorage.setItem('pe_pins', JSON.stringify(pinsCache)); } catch {}
+}
+function isPinned(entry) {
+  const k = entryKey(entry);
+  return pinsList().some((p) => entryKey(p) === k);
+}
+function togglePin(entry) {
+  const k = entryKey(entry);
+  let pins = pinsList();
+  if (pins.some((p) => entryKey(p) === k)) {
+    pins = pins.filter((p) => entryKey(p) !== k);
+  } else {
+    pins = [entry, ...pins];
+  }
+  savePinsList(pins);
+  rebuildList();
+}
+function pinnedItems() {
+  return pinsList().map((entry) => ({
+    entry,
+    scope: 'both',
+    error: isErrorEvent(entry),
+    stopped: isStoppedEvent(entry),
+    _hay: haystack(entry),
+    pinned: true,
+  }));
+}
+
+/* ---------- Ton, Toasts, Desktop-Hinweise, Konfetti ---------- */
+let soundOn = localStorage.getItem('pe_sound') !== '0'; // Standard: an
+let notifOn = localStorage.getItem('pe_notif') === '1'; // Standard: aus
+let audioCtx = null;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch { return null; }
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+function playNotes(notes) {
+  if (!soundOn) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  for (const [freq, delay, dur] of notes) {
+    try {
+      const t0 = ctx.currentTime + delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.16, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.05);
+    } catch {}
+  }
+}
+
+const SND_TOP = [[784, 0, 0.12], [988, 0.1, 0.12], [1319, 0.2, 0.22]];
+const SND_ERR = [[233, 0, 0.18], [175, 0.16, 0.3]];
+const SND_STOP = [[440, 0, 0.12], [330, 0.12, 0.2]];
+
+function showToast(kind, title, sub) {
+  if (!toastsEl) return;
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  const b = document.createElement('b');
+  b.textContent = title;
+  el.appendChild(b);
+  if (sub) {
+    const s = document.createElement('span');
+    s.textContent = sub;
+    el.appendChild(s);
+  }
+  el.addEventListener('click', () => el.remove());
+  toastsEl.appendChild(el);
+  setTimeout(() => el.classList.add('out'), 4000);
+  setTimeout(() => el.remove(), 4500);
+  while (toastsEl.children.length > 4) toastsEl.firstChild.remove();
+}
+
+function notifyDesktop(kind, title, sub) {
+  if (!notifOn || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (!document.hidden) return; // nur im Hintergrund
+  try {
+    new Notification(title, { body: sub || '', icon: '/icon-192.png', tag: 'poke-ear-' + kind });
+  } catch {}
+}
+
+function updateToggleIcons() {
+  soundToggleEl.textContent = soundOn ? '🔊' : '🔇';
+  soundToggleEl.classList.toggle('off', !soundOn);
+  notifToggleEl.textContent = notifOn ? '🔔' : '🔕';
+  notifToggleEl.classList.toggle('off', !notifOn);
+}
+
+soundToggleEl.addEventListener('click', () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem('pe_sound', soundOn ? '1' : '0'); } catch {}
+  updateToggleIcons();
+  if (soundOn) playNotes([[880, 0, 0.1]]);
+});
+
+notifToggleEl.addEventListener('click', async () => {
+  if (notifOn) {
+    notifOn = false;
+    try { localStorage.setItem('pe_notif', '0'); } catch {}
+    updateToggleIcons();
+    return;
+  }
+  if (typeof Notification === 'undefined') {
+    showToast('stopped', 'Nicht unterstützt', 'Dein Browser kennt keine Desktop-Hinweise.');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    notifOn = true;
+    try { localStorage.setItem('pe_notif', '1'); } catch {}
+    showToast('top', 'Desktop-Hinweise aktiv', 'Auch wenn der Tab im Hintergrund ist.');
+  } else {
+    showToast('err', 'Hinweise blockiert', 'Erlaube Benachrichtigungen in den Browsereinstellungen.');
+  }
+  updateToggleIcons();
+});
+updateToggleIcons();
+
+function fireConfetti() {
+  const colors = ['#ffcb05', '#e3350d', '#34d399', '#2a75bb', '#a78bfa', '#ff6b3d'];
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight * 0.3;
+  for (let i = 0; i < 42; i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 90 + Math.random() * 260;
+    p.style.left = cx + 'px';
+    p.style.top = cy + 'px';
+    p.style.background = colors[i % colors.length];
+    p.style.setProperty('--cx', Math.round(Math.cos(angle) * dist) + 'px');
+    p.style.setProperty('--cy', Math.round(Math.sin(angle) * dist + 150) + 'px');
+    p.style.setProperty('--cr', Math.round(Math.random() * 720 - 360) + 'deg');
+    p.style.animationDelay = Math.round(Math.random() * 80) + 'ms';
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 1500);
+  }
+}
 
 function setStatus(state) {
   if (state === 'online') {
@@ -450,9 +651,11 @@ function makeEventEl(item) {
   const el = document.createElement('div');
   el.className = 'event';
   el.dataset.id = entry.id;
+  el.dataset.key = entryKey(entry);
   if (item.scope !== 'all') el.classList.add('e-top');
   if (item.stopped) el.classList.add('e-stopped');
   if (item.error) el.classList.add('e-error');
+  if (item.pinned) el.classList.add('pinned-extra');
 
   const body = bodyHtml(entry);
   if (body && body.kind) el.classList.add('e-' + body.kind);
@@ -472,11 +675,21 @@ function makeEventEl(item) {
   const typeBadge = '<span class="badge ' + escapeHtml(entry.type) + '">' + escapeHtml(entry.type) + '</span>';
   const evBadge = (entry.method === 'DISCORD' && body.evBadge) ? '' : (body.evBadge || typeBadge);
 
+  const stars = getStars(entry);
+  const starsHtml = stars > 0
+    ? '<span class="mini-stars" title="Deine Bewertung: ' + stars + ' von 5">' + '★'.repeat(stars) + '☆'.repeat(5 - stars) + '</span>'
+    : '';
+  const pinned = isPinned(entry);
+  const pinHtml = (item.scope !== 'all' || pinned)
+    ? '<button class="pin-btn' + (pinned ? ' on' : '') + '" title="Favorit merken (bleibt auch nach Leeren/Neustart)">' + (pinned ? '📌' : '📍') + '</button>'
+    : '';
+
   head.innerHTML =
     '<span class="badge ' + escapeHtml((entry.method || '').toLowerCase()) + '">' + escapeHtml(entry.method || '') + '</span>' +
     statusBadge +
     evBadge +
-    '<span class="event-meta"><span class="time">' + time + '</span>' +
+    '<span class="event-meta">' + pinHtml + starsHtml +
+    '<span class="time">' + time + '</span>' +
     '<span class="id">#' + entry.id + '</span></span>';
 
   const contentType = entry.headers && entry.headers['content-type'];
@@ -499,8 +712,6 @@ function getChannel(entry) {
   if (b && typeof b === 'object' && b.channel) return String(b.channel).toLowerCase().trim();
   return '';
 }
-
-function findPinnedItem() { return null; } // wird in Etappe 2 mit Favoriten gefüllt
 
 function scopeOf(entry) {
   // Ein Webhook für alles: Top-Fänge landen in BEIDEN Tabs, Rest nur in der Übersicht
@@ -529,7 +740,7 @@ function showsInTab(item) {
 
 function refreshListChrome() {
   const matching = allEntries.filter(showsInTab).length;
-  const rendered = eventsEl.children.length;
+  const rendered = eventsEl.querySelectorAll('.event:not(.pinned-extra)').length;
   const remaining = matching - rendered;
   showMoreWrap.classList.toggle('hidden', remaining <= 0);
   if (remaining > 0) {
@@ -563,6 +774,11 @@ function updateCounters() {
 }
 
 function updateEmptyState() {
+  if (!booted) {
+    // Beim ersten Laden liegen noch Skeletons im Feed
+    emptyEl.classList.add('hidden');
+    return;
+  }
   const visible = allEntries.filter(showsInTab).length;
   if (visible > 0) {
     emptyEl.classList.add('hidden');
@@ -632,6 +848,15 @@ function rebuildList() {
   eventsEl.innerHTML = '';
   for (const item of shown) {
     eventsEl.prepend(makeEventEl(item));
+  }
+  if (activeTab === 'top') {
+    const baseKeys = new Set(shown.map((s) => entryKey(s.entry)));
+    const pins = pinnedItems()
+      .filter((p) => showsInTab(p) && !baseKeys.has(entryKey(p.entry)))
+      .reverse(); // neuestes Pin ganz oben
+    for (const p of pins) {
+      eventsEl.prepend(makeEventEl(p));
+    }
   }
   refreshListChrome();
   updateEmptyState();
@@ -783,9 +1008,38 @@ function openModal(item) {
 
   modalContentEl.innerHTML = body.html;
   modalJsonEl.innerHTML = highlightJson(entry.body);
-  modalStarsEl.innerHTML = '';
+  renderModalStars(item);
   modalEl.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+}
+
+function renderModalStars(item) {
+  const cur = getStars(item.entry);
+  modalStarsEl.innerHTML = '<span class="stars-label">Deine Bewertung:</span>';
+  for (let i = 1; i <= 5; i++) {
+    const b = document.createElement('button');
+    b.className = 'star-btn' + (i <= cur ? ' on' : '');
+    b.textContent = '★';
+    b.title = i + ' Stern' + (i > 1 ? 'e' : '') + (i === cur ? ' (klicken = entfernen)' : '');
+    b.addEventListener('click', () => {
+      setStars(item.entry, i === cur ? 0 : i);
+      renderModalStars(item);
+      rebuildList();
+    });
+    modalStarsEl.appendChild(b);
+  }
+  if (item.scope !== 'all' || isPinned(item.entry)) {
+    const pin = document.createElement('button');
+    const pinned = isPinned(item.entry);
+    pin.className = 'btn ghost small';
+    pin.style.marginLeft = '10px';
+    pin.textContent = pinned ? '📌 Gemerkt' : '📍 Merken';
+    pin.addEventListener('click', () => {
+      togglePin(item.entry);
+      renderModalStars(item);
+    });
+    modalStarsEl.appendChild(pin);
+  }
 }
 
 function closeModal() {
@@ -794,16 +1048,25 @@ function closeModal() {
   currentModalItem = null;
 }
 
-function itemById(id) {
-  return allEntries.find((e) => e.entry.id === id) || findPinnedItem(id) || null;
+function itemByKey(key) {
+  return allEntries.find((e) => entryKey(e.entry) === key)
+    || pinnedItems().find((p) => entryKey(p.entry) === key)
+    || null;
 }
 
 eventsEl.addEventListener('click', (ev) => {
+  const pinBtn = ev.target.closest('.pin-btn');
+  if (pinBtn) {
+    const card = pinBtn.closest('.event');
+    const item = card ? itemByKey(card.dataset.key) : null;
+    if (item) togglePin(item.entry);
+    return;
+  }
   if (ev.target.closest('a, button, .mini-stars')) return;
   const card = ev.target.closest('.event');
-  if (!card) return;
-  const id = Number(card.dataset.id);
-  if (!Number.isNaN(id)) openModal(itemById(id));
+  if (!card || !card.dataset.key) return;
+  const item = itemByKey(card.dataset.key);
+  if (item) openModal(item);
 });
 
 modalCloseBtn.addEventListener('click', closeModal);
@@ -814,7 +1077,23 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- Nach jedem neuen Eintrag (Hooks für Etappe 2) ---------- */
 function afterEntryAdded(item) {
-  // Toast / Sound / Konfetti werden in Etappe 2 verdrahtet
+  if (!booted) return; // kein Spam beim Laden des Verlaufs
+  const title = titleFor(item.entry);
+  const isTop = item.scope === 'both' || item.scope === 'top';
+  if (isTop) {
+    playNotes(SND_TOP);
+    fireConfetti();
+    showToast('top', '⭐ Top-Fang!', title);
+    notifyDesktop('top', '⭐ Top-Fang!', title);
+  } else if (item.error) {
+    playNotes(SND_ERR);
+    showToast('err', '❌ Fehler', title);
+    notifyDesktop('err', '❌ Fehler', title);
+  } else if (item.stopped) {
+    playNotes(SND_STOP);
+    showToast('stopped', '⏸ Stopped/Pause', title);
+    notifyDesktop('stopped', '⏸ Stopped/Pause', title);
+  }
 }
 
 function setSubFilter(sub) {
@@ -862,6 +1141,10 @@ testBtn.addEventListener('click', async () => {
 
 clearBtn.addEventListener('click', clearList);
 
+function removeSkeletons() {
+  eventsEl.querySelectorAll('.skeleton').forEach((el) => el.remove());
+}
+
 function loadHistory() {
   return fetch('/api/messages')
     .then((r) => r.json())
@@ -871,6 +1154,7 @@ function loadHistory() {
     .catch(() => {})
     .finally(() => {
       booted = true;
+      removeSkeletons();
       updateEmptyState();
       refreshListChrome();
     });
