@@ -1,22 +1,42 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const PORT = process.env.PORT || 8080;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
+const CLEARED_FILE = path.join(__dirname, '.cleared.json');
 
-const MAX_MESSAGES = 200;
+const MAX_MESSAGES = 5000;
 const MAX_BODY = 1024 * 1024;
+const BACKFILL_CHANNELS = ['summerie', 'catch-info'];
 
 const messages = [];
 const clients = new Set();
 let messageId = 0;
 
+function readClearedAt() {
+  try {
+    const d = JSON.parse(readFileSync(CLEARED_FILE, 'utf8'));
+    return d.clearedAt ? new Date(d.clearedAt) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeClearedAt(date) {
+  try {
+    writeFileSync(CLEARED_FILE, JSON.stringify({ clearedAt: date.toISOString() }));
+  } catch (err) {
+    console.error('clearedAt speichern fehlgeschlagen:', err.message);
+  }
+}
+
 function addMessage(entry) {
   entry.id = ++messageId;
-  entry.time = new Date().toISOString();
+  if (!entry.time) entry.time = new Date().toISOString();
   messages.push(entry);
   while (messages.length > MAX_MESSAGES) messages.shift();
   broadcast(entry);
@@ -111,6 +131,75 @@ function send404(res) {
 
 /* ---------- Discord-Brücke ---------- */
 
+function discordToEntry(msg) {
+  const embeds = msg.embeds.map((e) => ({
+    title: e.title,
+    description: e.description,
+    color: e.color,
+    url: e.url,
+    author: e.author ? e.author.name : undefined,
+    fields: (e.fields || []).map((f) => ({
+      name: f.name, value: f.value, inline: f.inline,
+    })),
+    footer: e.footer ? e.footer.text : undefined,
+    timestamp: e.timestamp,
+    image: e.image ? e.image.url : undefined,
+    thumbnail: e.thumbnail ? e.thumbnail.url : undefined,
+  }));
+
+  const body = {
+    source: 'discord',
+    channel: msg.channel.name || msg.channel.id,
+    author: msg.webhookName || 'webhook',
+    content: msg.content || undefined,
+    embeds,
+    discord_time: msg.createdAt.toISOString(),
+  };
+
+  return {
+    method: 'DISCORD',
+    url: '/discord/' + (msg.channel.name || msg.channel.id),
+    headers: { 'content-type': 'application/json' },
+    type: 'json',
+    body,
+    time: msg.createdAt.toISOString(),
+  };
+}
+
+async function backfillFromDiscord(client, channelId) {
+  const clearedAt = readClearedAt();
+  const channels = [];
+
+  if (channelId) {
+    const ch = await client.channels.fetch(channelId).catch(() => null);
+    if (ch) channels.push(ch);
+  } else {
+    client.channels.cache.forEach((ch) => {
+      if (ch.isTextBased && ch.isTextBased() && BACKFILL_CHANNELS.includes(ch.name)) {
+        channels.push(ch);
+      }
+    });
+  }
+
+  let imported = 0;
+  for (const ch of channels) {
+    try {
+      const fetched = await ch.messages.fetch({ limit: 200 });
+      const list = [...fetched.values()]
+        .filter((m) => m.webhookId)
+        .filter((m) => !clearedAt || m.createdAt > clearedAt)
+        .sort((a, b) => a.createdAt - b.createdAt);
+      for (const m of list) {
+        addMessage(discordToEntry(m));
+        imported += 1;
+      }
+    } catch (err) {
+      console.error('Backfill fehlgeschlagen für', ch.name || ch.id, err.message);
+    }
+  }
+  console.log('Backfill fertig:', imported, 'Nachrichten aus Discord geladen,', messages.length, 'gesamt gespeichert.');
+}
+
 function startDiscordBridge() {
   const token = process.env.DISCORD_TOKEN;
   if (!token) {
@@ -131,6 +220,9 @@ function startDiscordBridge() {
     client.once('ready', () => {
       console.log('Discord-Brücke online als', client.user.tag,
         channelId ? '(Kanal-Filter: ' + channelId + ')' : '(alle Kanäle)');
+      backfillFromDiscord(client, channelId).catch((err) => {
+        console.error('Backfill Fehler:', err.message);
+      });
     });
 
     client.on('messageCreate', (msg) => {
@@ -138,37 +230,10 @@ function startDiscordBridge() {
         if (channelId && msg.channel.id !== channelId) return;
         if (!msg.webhookId) return; // nur Webhook-Nachrichten (vom Pokémon-Go-Bot)
 
-        const embeds = msg.embeds.map((e) => ({
-          title: e.title,
-          description: e.description,
-          color: e.color,
-          url: e.url,
-          author: e.author ? e.author.name : undefined,
-          fields: (e.fields || []).map((f) => ({
-            name: f.name, value: f.value, inline: f.inline,
-          })),
-          footer: e.footer ? e.footer.text : undefined,
-          timestamp: e.timestamp,
-          image: e.image ? e.image.url : undefined,
-          thumbnail: e.thumbnail ? e.thumbnail.url : undefined,
-        }));
+        const clearedAt = readClearedAt();
+        if (clearedAt && msg.createdAt <= clearedAt) return;
 
-        const body = {
-          source: 'discord',
-          channel: msg.channel.name || msg.channel.id,
-          author: msg.webhookName || 'webhook',
-          content: msg.content || undefined,
-          embeds,
-          discord_time: msg.createdAt.toISOString(),
-        };
-
-        addMessage({
-          method: 'DISCORD',
-          url: '/discord/' + (msg.channel.name || msg.channel.id),
-          headers: { 'content-type': 'application/json' },
-          type: 'json',
-          body,
-        });
+        addMessage(discordToEntry(msg));
       } catch (err) {
         console.error('Discord-Brücke Fehler:', err);
       }
@@ -215,6 +280,7 @@ const server = createServer(async (req, res) => {
 
   if (p === '/api/messages' && req.method === 'DELETE') {
     messages.length = 0;
+    writeClearedAt(new Date());
     json(res, 200, { ok: true });
     return;
   }

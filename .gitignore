@@ -4,3 +4,4 @@ ENV/
 .env
 *.log
 .DS_Store
+.cleared.json

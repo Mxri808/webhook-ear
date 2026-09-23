@@ -6,6 +6,7 @@ const emptyTitleEl = document.getElementById('emptyTitle');
 const emptySubEl = document.getElementById('emptySub');
 const countEl = document.getElementById('count');
 const topCountEl = document.getElementById('topCount');
+const rateCountEl = document.getElementById('rateCount');
 const lastTimeEl = document.getElementById('lastTime');
 const statusEl = document.getElementById('status');
 const connStateEl = document.getElementById('connState');
@@ -469,6 +470,41 @@ function updateEmptyState() {
   }
 }
 
+function updateRate() {
+  const now = Date.now();
+  const times = allEntries
+    .map((e) => new Date(e.entry.time).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+
+  if (times.length === 0) {
+    rateCountEl.textContent = '0';
+    return;
+  }
+  if (times.length < 2) {
+    rateCountEl.textContent = '–';
+    return;
+  }
+
+  const spanMs = now - times[0];
+  const recent = times.filter((t) => now - t <= 3600e3).length;
+
+  let rate;
+  if (spanMs <= 3600e3) {
+    // Noch keine vollen Stunde Daten vorhanden: hochrechnen
+    const spanMin = Math.max(spanMs / 60000, 0.5);
+    if (spanMin < 2 && times.length < 3) {
+      rateCountEl.textContent = '…';
+      return;
+    }
+    rate = Math.round(times.length * (60 / spanMin));
+  } else {
+    // Volle Stunde vorhanden: echte Nachrichten der letzten 60 Min.
+    rate = recent;
+  }
+  rateCountEl.textContent = String(rate);
+}
+
 function rebuildList() {
   eventsEl.innerHTML = '';
   for (const item of allEntries) {
@@ -496,6 +532,7 @@ function addEntry(entry) {
   }
 
   updateCounters();
+  updateRate();
   lastTimeEl.textContent = new Date(entry.time).toLocaleTimeString('de-DE');
   updateEmptyState();
 }
@@ -525,6 +562,7 @@ function clearList() {
   seenIds.clear();
   eventsEl.innerHTML = '';
   updateCounters();
+  updateRate();
   updateEmptyState();
   fetch('/api/messages', { method: 'DELETE' }).catch(() => {});
 }
@@ -576,3 +614,4 @@ function connect() {
 
 loadHistory();
 connect();
+setInterval(updateRate, 30000);
