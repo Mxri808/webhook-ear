@@ -867,6 +867,7 @@ function haystack(entry) {
 function showsInTab(item) {
   const scope = item.scope;
   if (activeTab === 'top') {
+    if (item.error) return false; // Fehler nie im Tab Top-Fänge
     if (scope !== 'top' && scope !== 'both') return false;
   } else {
     if (scope === 'top') return false;
@@ -898,7 +899,7 @@ function refreshListChrome() {
 
 function updateCounters() {
   const overview = allEntries.filter((e) => e.scope === 'all' || e.scope === 'both');
-  const top = allEntries.filter((e) => e.scope === 'top' || e.scope === 'both').length;
+  const top = allEntries.filter((e) => (e.scope === 'top' || e.scope === 'both') && !e.error).length;
   const ok = overview.filter((e) => !e.error && !e.stopped).length;
   const err = overview.filter((e) => e.error).length;
   const stopped = overview.filter((e) => e.stopped).length;
