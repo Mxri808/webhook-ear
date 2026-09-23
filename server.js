@@ -14,7 +14,8 @@ const MAX_BODY = 1024 * 1024;
 const messages = [];
 const clients = new Set();
 let messageId = 0;
-let backfillPromise = null;
+let resolveBackfill = () => {};
+const backfillPromise = new Promise((r) => { resolveBackfill = r; });
 
 function readClearedAt() {
   try {
@@ -203,6 +204,7 @@ function startDiscordBridge() {
   const token = process.env.DISCORD_TOKEN;
   if (!token) {
     console.log('DISCORD_TOKEN nicht gesetzt – Discord-Brücke deaktiviert.');
+    resolveBackfill();
     return;
   }
 
@@ -219,9 +221,9 @@ function startDiscordBridge() {
     client.once('ready', () => {
       console.log('Discord-Brücke online als', client.user.tag,
         channelId ? '(Kanal-Filter: ' + channelId + ')' : '(alle Kanäle)');
-      backfillPromise = backfillFromDiscord(client, channelId).catch((err) => {
-        console.error('Backfill Fehler:', err.message);
-      });
+      backfillFromDiscord(client, channelId)
+        .catch((err) => { console.error('Backfill Fehler:', err.message); })
+        .finally(resolveBackfill);
     });
 
     client.on('messageCreate', (msg) => {
@@ -240,9 +242,11 @@ function startDiscordBridge() {
 
     client.login(token).catch((err) => {
       console.error('Discord-Login fehlgeschlagen:', err.message);
+      resolveBackfill();
     });
   }).catch((err) => {
     console.error('discord.js konnte nicht geladen werden:', err.message);
+    resolveBackfill();
   });
 }
 
@@ -273,9 +277,12 @@ const server = createServer(async (req, res) => {
   }
 
   if (p === '/api/messages' && req.method === 'GET') {
-    if (backfillPromise) {
-      try { await backfillPromise; } catch { /* Fehler egal, Rest zeigen */ }
-    }
+    // Warte auf Discord-Nachladen (max. 20s), damit nie "0" angezeigt wird,
+    // obwohl gleich danach der Verlauf importiert wird.
+    await Promise.race([
+      backfillPromise,
+      new Promise((r) => setTimeout(r, 20000)),
+    ]);
     json(res, 200, { messages });
     return;
   }
